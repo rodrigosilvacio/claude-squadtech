@@ -57,9 +57,9 @@ export async function atualizar(p: Projeto, campos: Record<string, unknown>) {
 
 export const listar = (itens: string[]) => (itens.length ? itens.map((i) => `- ${i}`).join('\n') : '- nenhuma');
 
-// Chamada ao Claude com saída estruturada. `fallbacks: "default"` reenvia no servidor
-// um pedido recusado pelos classificadores para o modelo recomendado.
-export async function perguntar<T>(p: Projeto, system: string, conteudo: string, formato: object, effort: 'low' | 'medium', maxTokens: number): Promise<T> {
+// Chamada ao Claude. `fallbacks: "default"` reenvia no servidor um pedido recusado
+// pelos classificadores para o modelo recomendado. Com `formato`, a saída vem em JSON Schema.
+async function chamar(p: Projeto, system: string, conteudo: string, effort: 'low' | 'medium', maxTokens: number, formato?: object) {
   const cfg = await config();
   if (p.tokens_entrada + p.tokens_saida > Number(cfg.teto_tokens_projeto)) {
     throw new Error('O projeto atingiu o teto de tokens configurado em squad_config.');
@@ -69,7 +69,7 @@ export async function perguntar<T>(p: Projeto, system: string, conteudo: string,
     max_tokens: maxTokens,
     system,
     messages: [{ role: 'user', content: conteudo }],
-    output_config: { effort, format: { type: 'json_schema', schema: formato } },
+    output_config: formato ? { effort, format: { type: 'json_schema', schema: formato } } : { effort },
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     // deno-lint-ignore no-explicit-any
@@ -78,10 +78,20 @@ export async function perguntar<T>(p: Projeto, system: string, conteudo: string,
   p.tokens_saida += resposta.usage?.output_tokens ?? 0;
   await atualizar(p, { tokens_entrada: p.tokens_entrada, tokens_saida: p.tokens_saida });
   if (resposta.stop_reason === 'refusal') throw new Error('O modelo recusou este pedido. Revise o briefing e tente de novo.');
-  if (resposta.stop_reason === 'max_tokens') throw new Error('A resposta do modelo veio cortada (limite de tokens).');
   // deno-lint-ignore no-explicit-any
   const texto = resposta.content.map((b: any) => (b.type === 'text' ? b.text : '')).join('');
-  return JSON.parse(texto) as T;
+  return { texto, cortada: resposta.stop_reason === 'max_tokens' };
+}
+
+export async function perguntar<T>(p: Projeto, system: string, conteudo: string, formato: object, effort: 'low' | 'medium', maxTokens: number): Promise<T> {
+  const r = await chamar(p, system, conteudo, effort, maxTokens, formato);
+  if (r.cortada) throw new Error('A resposta do modelo veio cortada (limite de tokens).');
+  return JSON.parse(r.texto) as T;
+}
+
+// Saída em texto livre (código): sem o escape do JSON, cabe mais arquivo no mesmo limite.
+export function perguntarTexto(p: Projeto, system: string, conteudo: string, effort: 'low' | 'medium', maxTokens: number) {
+  return chamar(p, system, conteudo, effort, maxTokens);
 }
 
 // Último artefato de um tipo (opcionalmente só os aprovados).

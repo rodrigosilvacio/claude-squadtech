@@ -200,9 +200,13 @@ Como você escreve:
 - Supabase: import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.5/+esm' e SUPABASE_URL e SUPABASE_CHAVE vindos de config.js (no mesmo diretório js/: './config.js'). Crie o cliente uma vez só, no módulo que a arquitetura indicar.
 - Caminhos relativos sempre. Nada de bibliotecas além das que a arquitetura cita.
 - Texto da interface em português do Brasil, claro e direto, sem travessões.
-- O arquivo inteiro vai em "conteudo", sem cercas de Markdown, até o limite de tamanho das regras técnicas.
+- Fique dentro do limite de tamanho das regras técnicas: código enxuto, sem repetição, sem comentários longos.
 
-Em "fala_para_eduardo", em uma frase, diga o que entregou e qualquer ponto de atenção para a integração.
+Responda exatamente neste formato, sem nada antes nem depois:
+FALA: <uma frase para o Eduardo: o que entregou e qualquer ponto de atenção para a integração>
+<arquivo>
+<o arquivo completo, sem cercas de Markdown>
+</arquivo>
 
 ${GUARDA}`;
 }
@@ -212,11 +216,6 @@ export const FORMATO_EDUARDO_PLANO = objeto({
   contrato_markdown: texto,
   ordem: listaTextos,
   notas: { type: 'array', items: objeto({ caminho: texto, instrucoes: texto }) },
-});
-
-export const FORMATO_ARQUIVO = objeto({
-  conteudo: texto,
-  fala_para_eduardo: texto,
 });
 
 export const FORMATO_EDUARDO_REVISAO = objeto({

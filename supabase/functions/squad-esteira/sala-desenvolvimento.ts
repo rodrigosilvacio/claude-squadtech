@@ -3,8 +3,8 @@
 //   desenvolvimento: dev_arquivo (um arquivo por invocação, pelo dono da tarefa)
 //   integracao:      eduardo_integra → [dev_corrige, um arquivo por invocação] → delivery
 // Cada arquivo é gerado numa chamada própria para caber no tempo de uma invocação.
-import { atualizar, config, emitir, estado, fala, perguntar, type Projeto, supabase, ultimoArtefato } from './nucleo.ts';
-import { devPrompt, EDUARDO, FORMATO_ARQUIVO, FORMATO_EDUARDO_PLANO, FORMATO_EDUARDO_REVISAO } from './prompts.ts';
+import { atualizar, config, emitir, estado, fala, perguntar, perguntarTexto, type Projeto, supabase, ultimoArtefato } from './nucleo.ts';
+import { devPrompt, EDUARDO, FORMATO_EDUARDO_PLANO, FORMATO_EDUARDO_REVISAO } from './prompts.ts';
 import { type Plano, regras } from './sala-arquitetura.ts';
 import { type Problema, verificarArquivos } from './verificacoes.ts';
 
@@ -57,6 +57,32 @@ export async function salvarArquivo(p: Projeto, caminho: string, conteudo: strin
 }
 
 const semCercas = (s: string) => s.replace(/^\s*```[a-z]*\n/i, '').replace(/\n```\s*$/, '');
+const TAMANHO_ENXUTO = 15000;
+
+// Um dev escreve um arquivo. Devolve null se a resposta passou do limite de tokens.
+async function escreverArquivo(p: Projeto, agente: string, pedido: string): Promise<{ conteudo: string; fala: string } | null> {
+  const r = await perguntarTexto(p, devPrompt(agente), pedido, 'low', 16000);
+  if (r.cortada) return null;
+  const ini = r.texto.indexOf('<arquivo>');
+  const fim = r.texto.lastIndexOf('</arquivo>');
+  if (ini < 0 || fim < ini) throw new Error(`${NOME[agente] ?? 'O dev'} não devolveu o arquivo no formato combinado.`);
+  return {
+    conteudo: semCercas(r.texto.slice(ini + '<arquivo>'.length, fim).replace(/^\n/, '')),
+    fala: r.texto.match(/FALA:\s*(.+)/)?.[1]?.trim() ?? 'Arquivo entregue.',
+  };
+}
+
+// Arquivo grande demais: na primeira vez o Eduardo pede uma versão enxuta; na segunda, para.
+async function pedirVersaoEnxuta(p: Projeto, agente: string, caminho: string, subpasso: string) {
+  const enxutos = (p.rascunho.enxutos as string[]) ?? [];
+  if (enxutos.includes(caminho)) throw new Error(`O arquivo ${caminho} passou do tamanho mesmo na versão enxuta. Vale dividi-lo em dois na arquitetura`);
+  await fala(p, 'eduardo', agente, `${NOME[agente]}, o ${caminho} ficou grande demais. Reescreve mais enxuto, até ${TAMANHO_ENXUTO} caracteres.`);
+  await atualizar(p, { subpasso, passo_em: null, tentativas: 0, rascunho: { ...p.rascunho, enxutos: [...enxutos, caminho] } });
+}
+
+const avisoEnxuto = (p: Projeto, caminho: string) => (((p.rascunho.enxutos as string[]) ?? []).includes(caminho)
+  ? `\nATENÇÃO: sua versão anterior passou do tamanho. Escreva uma versão enxuta, com até ${TAMANHO_ENXUTO} caracteres: reaproveite funções, corte comentários e repetição, mantendo os exports e ids do contrato.`
+  : '');
 
 // ---------- planejamento ----------
 
@@ -114,11 +140,14 @@ async function devArquivo(p: Projeto) {
   const agente = donoDo(plano, caminho);
   const gerados = await arquivosGerados(p);
   await estado(p, agente, 'digitando');
-  const r = await perguntar<{ conteudo: string; fala_para_eduardo: string }>(p, devPrompt(agente),
-    await pedidoArquivo(p, caminho, `\nTarefa: escreva o arquivo ${caminho} completo (até ${cfg.max_caracteres_arquivo} caracteres).`, gerados),
-    FORMATO_ARQUIVO, 'low', 12000);
-  await salvarArquivo(p, caminho, semCercas(r.conteudo), agente, (gerados.get(caminho)?.versao ?? 0) + 1);
-  await fala(p, agente, 'eduardo', r.fala_para_eduardo);
+  const r = await escreverArquivo(p, agente,
+    await pedidoArquivo(p, caminho, `\nTarefa: escreva o arquivo ${caminho} completo (até ${cfg.max_caracteres_arquivo} caracteres).${avisoEnxuto(p, caminho)}`, gerados));
+  if (!r) {
+    await pedirVersaoEnxuta(p, agente, caminho, 'dev_arquivo');
+    return;
+  }
+  await salvarArquivo(p, caminho, r.conteudo, agente, (gerados.get(caminho)?.versao ?? 0) + 1);
+  await fala(p, agente, 'eduardo', r.fala);
 
   const novosFeitos = [...feitos, caminho];
   for (const [i, t] of plano.tarefas.entries()) {
@@ -189,11 +218,14 @@ async function devCorrige(p: Projeto) {
   const atual = gerados.get(caminho);
   const meus = pontos.filter((x) => x.arquivo === caminho).map((x, i) => `${i + 1}. ${x.problema} Correção: ${x.correcao}`).join('\n');
   await estado(p, agente, 'digitando');
-  const r = await perguntar<{ conteudo: string; fala_para_eduardo: string }>(p, devPrompt(agente),
-    await pedidoArquivo(p, caminho, `\nVersão atual do seu arquivo:\n--- ${caminho} ---\n${atual?.conteudo ?? '(não gerado)'}\n\nO Eduardo apontou na integração:\n${meus}\n\nTarefa: devolva o arquivo ${caminho} completo e corrigido (até ${cfg.max_caracteres_arquivo} caracteres), mudando só o necessário.`, gerados),
-    FORMATO_ARQUIVO, 'low', 12000);
-  await salvarArquivo(p, caminho, semCercas(r.conteudo), agente, (atual?.versao ?? 0) + 1);
-  await fala(p, agente, 'eduardo', r.fala_para_eduardo);
+  const r = await escreverArquivo(p, agente,
+    await pedidoArquivo(p, caminho, `\nVersão atual do seu arquivo:\n--- ${caminho} ---\n${atual?.conteudo ?? '(não gerado)'}\n\nO Eduardo apontou na integração:\n${meus}\n\nTarefa: devolva o arquivo ${caminho} completo e corrigido (até ${cfg.max_caracteres_arquivo} caracteres), mudando só o necessário.${avisoEnxuto(p, caminho)}`, gerados));
+  if (!r) {
+    await pedirVersaoEnxuta(p, agente, caminho, 'dev_corrige');
+    return;
+  }
+  await salvarArquivo(p, caminho, r.conteudo, agente, (atual?.versao ?? 0) + 1);
+  await fala(p, agente, 'eduardo', r.fala);
   const novos = [...corrigidos, caminho];
   if (novos.length >= fila.length) {
     await irParaDelivery(p, pontos);

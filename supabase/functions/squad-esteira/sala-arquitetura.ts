@@ -113,7 +113,10 @@ async function carlaPropoe(p: Projeto) {
   const versao = (anterior?.versao ?? 0) + 1;
   await estado(p, 'carla', anterior ? 'digitando' : 'lendo');
   let pedido = `${await contexto(p)}\n\n${await regras(p)}\n\n`;
-  if (anterior && (comentario || falha)) {
+  if (anterior && evolucao(p) && !comentario && !falha) {
+    const aprovada = await ultimoArtefato(p, 'arquitetura', true);
+    pedido += `<arquitetura>\n${(aprovada ?? anterior).conteudo}\n</arquitetura>\n\nEsta é a arquitetura do app que já está em produção. O PRD foi atualizado para a evolução do ciclo ${p.ciclo} (veja "Mudanças nesta versão" no PRD).\n\nTarefa (passo 1 de 2, o SQL vem depois): entregue o desenho da arquitetura v${versao} para essa evolução, com todos os campos. Mantenha os arquivos, contratos e tabelas que já existem; mude ou acrescente só o necessário. "arquivos" lista TODOS os arquivos do app (os que mudam e os que ficam iguais) e "tarefas" cobre todos eles. "modelo_dados" descreve só o que muda no banco (vazio se nada muda). Em "fala_para_diego", diga o que muda.`;
+  } else if (anterior && (comentario || falha)) {
     pedido += `<arquitetura>\n${anterior.conteudo}\n</arquitetura>\n\n`;
     if (comentario) pedido += `O cliente pediu ajustes na arquitetura v${anterior.versao}:\n"${comentario}"\n\n`;
     if (falha) pedido += `A migração da arquitetura v${anterior.versao} falhou no banco com este erro:\n${falha}\n\n`;
@@ -130,6 +133,16 @@ async function carlaPropoe(p: Projeto) {
   });
 }
 
+// SQL que já está no banco: das arquiteturas aprovadas cuja migração não falhou.
+async function sqlAplicado(p: Projeto): Promise<string> {
+  const { data } = await supabase.from('squad_artefatos').select('tipo, versao, conteudo, comentario').eq('projeto_id', p.id)
+    .in('tipo', ['sql', 'plano']).eq('aprovado', true).order('versao');
+  const falhas = new Set((data ?? []).filter((a) => a.tipo === 'plano' && a.comentario?.startsWith('Migração falhou')).map((a) => a.versao));
+  return (data ?? []).filter((a) => a.tipo === 'sql' && !falhas.has(a.versao)).map((a) => `-- arquitetura v${a.versao}\n${a.conteudo}`).join('\n\n');
+}
+
+const evolucao = (p: Projeto) => p.ciclo > 1;
+
 async function sqlDaVersao(p: Projeto, versao: number): Promise<string> {
   const { data } = await supabase.from('squad_artefatos').select('conteudo').eq('projeto_id', p.id).eq('tipo', 'sql').eq('versao', versao).maybeSingle();
   return data?.conteudo ?? '';
@@ -145,10 +158,14 @@ async function carlaSql(p: Projeto) {
   const sqlAnterior = (p.rascunho.sql_anterior as string | undefined) || r.sql;
   await estado(p, 'carla', 'digitando');
   let pedido = `${await regras(p)}\n\n<arquitetura>\n${montarDocumento(p, r, versao, prefixo)}\n</arquitetura>\n\n`;
-  if (sqlAnterior) pedido += `SQL da versão anterior:\n${sqlAnterior}\n\n`;
+  const aplicado = evolucao(p) ? await sqlAplicado(p) : '';
+  if (evolucao(p)) pedido += `SQL que JÁ ESTÁ aplicado no banco (não repita nada disto):\n${aplicado || '(nenhum)'}\n\n`;
+  else if (sqlAnterior) pedido += `SQL da versão anterior:\n${sqlAnterior}\n\n`;
   if (falha) pedido += `Essa migração falhou no banco com este erro:\n${falha}\n\n`;
   if (pontos?.length) pedido += `Apontamentos do Diego:\n${pontosEmTexto(pontos)}\n\n`;
-  pedido += `Tarefa (passo 2 de 2): escreva o SQL completo do modelo de dados acima, só com os comandos que o executor aceita, tudo em public.${prefixo}*, com RLS e as políticas de cada operação. Sem comentários longos. Em "fala_para_diego", resuma as políticas.`;
+  pedido += evolucao(p)
+    ? `Tarefa (passo 2 de 2): escreva só o SQL que falta para chegar ao modelo acima, partindo do banco atual: tabelas novas com "create table if not exists" + RLS + políticas; colunas novas com "alter table ... add column if not exists"; políticas novas com nomes que ainda não existem. Nada de recriar o que já existe. Se nada muda no banco, devolva "sql" vazio. Em "fala_para_diego", resuma o que muda.`
+    : `Tarefa (passo 2 de 2): escreva o SQL completo do modelo de dados acima, só com os comandos que o executor aceita, tudo em public.${prefixo}*, com RLS e as políticas de cada operação. Sem comentários longos. Em "fala_para_diego", resuma as políticas.`;
   const s = await perguntar<{ sql: string; fala_para_diego: string }>(p, CARLA, pedido, FORMATO_CARLA_SQL, 'low', 7000);
   await fala(p, 'carla', 'diego', s.fala_para_diego);
   const proposta: Proposta = { ...r, sql: s.sql.trim() };
@@ -165,7 +182,7 @@ async function diegoRevisa(p: Projeto) {
   const versao = p.rascunho.versao as number;
   const erros = await validarPlano(r, prefixo);
   await estado(p, 'diego', 'lendo');
-  const rev = await perguntar<Revisao>(p, DIEGO, `${await contexto(p)}\n\n${await regras(p)}\n\n<arquitetura>\n${montarDocumento(p, r, versao, prefixo)}\n</arquitetura>\n\nValidação automática (executor de SQL e plano):\n${erros.length ? listar(erros) : '- nenhum erro'}\n\nTarefa: revise a arquitetura com o seu checklist. Em "fala_para_carla", dê o parecer.`, FORMATO_DIEGO, 'medium', 12000);
+  const rev = await perguntar<Revisao>(p, DIEGO, `${await contexto(p)}\n\n${await regras(p)}\n\n<arquitetura>\n${montarDocumento(p, r, versao, prefixo)}\n</arquitetura>${evolucao(p) ? `\n\nEvolução (ciclo ${p.ciclo}) de um app em produção: o SQL acima é incremental e o banco já tem este SQL aplicado:\n${(await sqlAplicado(p)) || '(nenhum)'}\nConfira que nada é recriado e que o app atual continua funcionando.` : ''}\n\nValidação automática (executor de SQL e plano):\n${erros.length ? listar(erros) : '- nenhum erro'}\n\nTarefa: revise a arquitetura com o seu checklist. Em "fala_para_carla", dê o parecer.`, FORMATO_DIEGO, 'medium', 12000);
   const pontos: Ponto[] = [
     ...erros.map((e) => ({ trecho: 'validação automática', problema: e, sugestao: 'Corrigir conforme a regra.' })),
     ...rev.pontos,

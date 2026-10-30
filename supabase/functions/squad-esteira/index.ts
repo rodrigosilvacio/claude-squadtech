@@ -20,7 +20,7 @@ const PASSOS: Record<string, Record<string, (p: Projeto) => Promise<void>>> = {
 };
 const PRIMEIRO: Record<string, string> = {
   entrevista: 'ana_analisa', prd: 'bruno_escreve', arquitetura: 'carla_propoe', migracao: 'diego_aplica',
-  planejamento: 'eduardo_planeja', desenvolvimento: 'dev_arquivo', integracao: 'eduardo_integra', testes: 'julia_revisa', delivery: 'lucas_documenta',
+  planejamento: 'eduardo_planeja', desenvolvimento: 'dev_arquivo', integracao: 'eduardo_integra', testes: 'julia_revisa', delivery: 'lucas_documenta', apagando: 'lucas_remove',
 };
 const ETAPAS_AUTOMATICAS = Object.keys(PASSOS);
 const AGENTES = ['ana', 'bruno', 'carla', 'diego', 'eduardo', 'fernanda', 'gabriel', 'helena', 'igor', 'julia', 'lucas'];

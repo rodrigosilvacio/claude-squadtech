@@ -73,7 +73,7 @@ export const nuvem = {
 
   async projeto(id) {
     const { data, error } = await cliente.from('squad_projetos')
-      .select('id, nome, slug, etapa, subpasso, erro, rodada_po, rodada_qa, prefixo_db, tokens_entrada, tokens_saida, tokens_cache, url_app, url_repo, criado_em')
+      .select('id, nome, slug, etapa, subpasso, erro, rodada_po, rodada_qa, ciclo, prefixo_db, tokens_entrada, tokens_saida, tokens_cache, url_app, url_repo, criado_em')
       .eq('id', id).single();
     if (error) throw error;
     return data;

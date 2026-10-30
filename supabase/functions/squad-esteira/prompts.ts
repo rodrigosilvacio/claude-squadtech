@@ -286,6 +286,15 @@ export const FORMATO_EDUARDO_PLANO = objeto({
   notas: { type: 'array', items: objeto({ caminho: texto, instrucoes: texto }) },
 });
 
+// Ciclo de evolução: além do plano, quais arquivos precisam ser criados ou reescritos.
+export const FORMATO_EDUARDO_EVOLUCAO = objeto({
+  fala_para_time: texto,
+  contrato_markdown: texto,
+  ordem: listaTextos,
+  alterar: listaTextos,
+  notas: { type: 'array', items: objeto({ caminho: texto, instrucoes: texto }) },
+});
+
 export const FORMATO_EDUARDO_REVISAO = objeto({
   fala_para_time: texto,
   pontos: { type: 'array', items: objeto({ arquivo: texto, problema: texto, correcao: texto }) },

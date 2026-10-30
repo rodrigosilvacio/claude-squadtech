@@ -59,6 +59,16 @@ async function atualizarEstado() {
     const p = await nuvem.projeto(s.id);
     if (s === sessao) mostrarProjeto(p);
   } catch (e) {
+    // Projeto apagado (o Lucas removeu a linha): volta para o início.
+    if (e?.code === 'PGRST116' && s === sessao) {
+      fecharSessao();
+      diretor.cancelar();
+      motor.reiniciar();
+      ui.reiniciar();
+      ui.registrarSistema('Projeto apagado: app, banco e pasta no GitHub foram removidos.');
+      carregarProjetos();
+      return;
+    }
     console.warn('falha ao ler o projeto', e);
   }
 }
@@ -219,6 +229,53 @@ $('#btnPularTestes').addEventListener('click', async () => {
     $('#projetoTestes').hidden = true;
   } catch (e) {
     ui.registrarSistema(e.message, { erro: true });
+  }
+});
+
+// ---------- evolução e remoção ----------
+
+ui.aoPedirAjuste = () => {
+  $('#erroAjuste').textContent = '';
+  $('#dlgAjuste').showModal();
+  $('#textoAjuste').focus();
+};
+
+$('#formAjuste').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!sessao) return;
+  const botao = e.submitter;
+  botao.disabled = true;
+  try {
+    await nuvem.pedir('evoluir', { id: sessao.id, pedido: $('#textoAjuste').value.trim() });
+    $('#textoAjuste').value = '';
+    $('#dlgAjuste').close();
+  } catch (err) {
+    $('#erroAjuste').textContent = err.message;
+  } finally {
+    botao.disabled = false;
+  }
+});
+
+ui.aoApagar = (p) => {
+  $('#slugApagar').textContent = p.slug;
+  $('#confirmaApagar').value = '';
+  $('#erroApagar').textContent = '';
+  $('#dlgApagar').showModal();
+};
+
+$('#formApagar').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!sessao) return;
+  const botao = e.submitter;
+  botao.disabled = true;
+  try {
+    await nuvem.pedir('apagar', { id: sessao.id, confirmar: $('#confirmaApagar').value.trim() });
+    $('#dlgApagar').close();
+    ui.registrarSistema('O Lucas está apagando o projeto. Ele some da lista em instantes.');
+  } catch (err) {
+    $('#erroApagar').textContent = err.message;
+  } finally {
+    botao.disabled = false;
   }
 });
 

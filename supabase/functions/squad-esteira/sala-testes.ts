@@ -75,7 +75,7 @@ async function igorPlaneja(p: Projeto) {
   const r = await perguntar<{ fala_para_julia: string; testes: Teste[]; roteiro_manual: string[] }>(p, { contexto: await contextoProjeto(p), persona: IGOR }, [
     ...codigoPronto(gerados, ordem, ''),
     { texto: `Tarefa: escreva os testes automáticos dos critérios de aceite do PRD para este código, usando seletores que existem nele. O que não dá para automatizar vai em "roteiro_manual". Em "fala_para_julia", comente em uma frase o que vai cobrir.` },
-  ], FORMATO_IGOR_PLANO, 'medium', 12000);
+  ], FORMATO_IGOR_PLANO, 'low', 16000);
   const testes = validarTestes(r.testes);
   if (!testes.length) throw new Error('O Igor não gerou nenhum teste válido.');
 
@@ -131,7 +131,7 @@ async function igorAvalia(p: Projeto) {
     const r = await perguntar<{ fala_para_time: string; falhas: Ponto[]; testes_ajustados: Teste[] }>(p, { contexto: await contextoProjeto(p), persona: IGOR }, [
       ...codigoPronto(gerados, ordem, ''),
       { texto: `Rodada ${p.rodada_qa} no navegador: ${resultados.length - falhos.length} de ${resultados.length} testes passaram.\n\nTestes que falharam:\n${detalhes}\n\nTarefa: para cada falha, decida a causa olhando o código. Se for defeito do app, registre em "falhas" o arquivo (caminho exato), o problema e a correção. Se o defeito for do teste (seletor errado, espera curta, passo que não existe no app), devolva o teste corrigido em "testes_ajustados" com o mesmo id. Em "fala_para_time", diga o resultado e o que volta para o time.` },
-    ], FORMATO_IGOR_AVALIACAO, 'medium', 12000);
+    ], FORMATO_IGOR_AVALIACAO, 'low', 16000);
     const caminhos = new Set(plano.arquivos.map((a) => a.caminho));
     falhas = r.falhas.filter((x) => caminhos.has(x.arquivo));
     const ajustados = new Map(validarTestes(r.testes_ajustados).map((t) => [t.id, t]));

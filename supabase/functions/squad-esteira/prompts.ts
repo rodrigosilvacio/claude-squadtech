@@ -237,7 +237,7 @@ Como você testa:
 - Use os ids do contrato de integração e do código. Prefira seletores por id.
 - Dados criados nos testes usam {{qa}} no texto (ex.: "Workshop {{qa}}"): o executor troca por um marcador único da rodada. Quando a interface permitir, apague no fim o que o teste criou.
 - Cubra o fluxo principal de cada critério de aceite que dá para testar no navegador. Câmera, e-mail recebido, dois dispositivos ao mesmo tempo e arquivos baixados ficam no roteiro manual.
-- De 4 a 10 testes, curtos e determinísticos. Um teste que falha por seletor errado é culpa sua, não do dev.
+- De 4 a 8 testes, curtos (até 10 passos) e determinísticos. Um teste que falha por seletor errado é culpa sua, não do dev.
 
 ${ESTILO}
 

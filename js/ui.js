@@ -394,10 +394,15 @@ export class UI {
       caixa.replaceChildren(el('p', { class: 'vazio', text: 'Nenhum projeto ainda. Descreva um briefing e clique em "Iniciar projeto".' }));
       return;
     }
+    const situacao = (p) => (p.erro ? 'parado com erro'
+      : p.etapa === 'testes' && p.subpasso === 'navegador' ? 'Sala 4 · esperando você rodar os testes'
+        : (STATUS_ETAPA[p.etapa] ?? p.etapa.replaceAll('_', ' ')));
     caixa.replaceChildren(el('ul', { class: 'projetos' }, projetos.map((p) => el('li', {},
       el('button', { type: 'button', class: 'projeto', onclick: () => aoAbrir(p.id) },
         el('strong', { text: p.nome }),
-        el('span', { text: `${p.erro ? 'parado com erro' : (STATUS_ETAPA[p.etapa] ?? p.etapa.replaceAll('_', ' '))} · ${new Date(p.criado_em).toLocaleDateString('pt-BR')}` })),
-      p.url_app ? el('a', { href: p.url_app, target: '_blank', rel: 'noopener' }, 'Abrir app') : null))));
+        el('span', { text: `${situacao(p)} · ${new Date(p.criado_em).toLocaleDateString('pt-BR')}` })),
+      el('div', { class: 'acoes-projeto' },
+        el('button', { type: 'button', class: 'botao primario', onclick: () => aoAbrir(p.id) }, 'Abrir no escritório'),
+        p.url_app ? el('a', { href: p.url_app, target: '_blank', rel: 'noopener', class: 'link' }, 'Ver app publicado') : null)))));
   }
 }

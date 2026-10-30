@@ -296,3 +296,5 @@ textarea:disabled { opacity: 0.4; }
   #previaApp { height: 48vh; }
   .lista-testes { max-height: none; }
 }
+
+.acoes-projeto { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 8px; }

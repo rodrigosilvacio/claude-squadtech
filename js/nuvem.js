@@ -50,7 +50,7 @@ export const nuvem = {
   async listarProjetos() {
     const { data, error } = await cliente
       .from('squad_projetos')
-      .select('id, nome, slug, etapa, erro, url_app, criado_em')
+      .select('id, nome, slug, etapa, subpasso, erro, url_app, criado_em')
       .order('criado_em', { ascending: false })
       .limit(50);
     if (error) throw error;

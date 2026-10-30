@@ -42,9 +42,19 @@ function el(tag, attrs = {}, ...filhos) {
   return n;
 }
 
-function hora() {
-  return new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+function hora(quando) {
+  return (quando ? new Date(quando) : new Date()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
+
+// Status legível de cada etapa da esteira (squad_projetos.etapa).
+const STATUS_ETAPA = {
+  entrevista: 'Sala 1 · Ana e Bruno analisando o briefing',
+  aguardando_respostas: 'Aguardando suas respostas',
+  prd: 'Sala 1 · Bruno escrevendo o PRD',
+  aguardando_aprovacao_prd: 'Aguardando sua aprovação do PRD',
+  arquitetura: 'PRD aprovado · a Sala de Arquitetura chega na Fase 2',
+  escalado: 'Encerrado pela Ana',
+};
 
 function retrato(id, tamanho = 28) {
   const c = el('canvas', { class: 'retrato', width: tamanho * 2, height: tamanho * 2, 'aria-hidden': 'true' });
@@ -145,7 +155,7 @@ export class UI {
     $('#vazioConversa').hidden = true;
   }
 
-  registrarFala(ev) {
+  registrarFala(ev, quando) {
     const def = POR_ID[ev.agente];
     const para = ev.para === 'usuario' ? 'você' : POR_ID[ev.para]?.nome;
     const sala = SALAS[def.sala];
@@ -157,25 +167,25 @@ export class UI {
           el('span', { class: 'cargo', text: def.cargo }),
           para ? el('span', { class: 'para', text: `→ ${para}` }) : null,
           el('span', { class: 'tag', style: `--cor:${sala.destaque}`, text: sala.nome }),
-          el('time', { text: hora() })),
+          el('time', { text: hora(quando) })),
         el('p', { text: ev.texto })));
     this.adicionarLinha(li);
   }
 
-  registrarSistema(texto) {
-    this.adicionarLinha(el('li', { class: 'sistema', 'data-sala': 'sistema' }, el('p', { text: texto }), el('time', { text: hora() })));
+  registrarSistema(texto, { quando, erro } = {}) {
+    this.adicionarLinha(el('li', { class: erro ? 'sistema erro' : 'sistema', 'data-sala': 'sistema' }, el('p', { text: texto }), el('time', { text: hora(quando) })));
   }
 
   // ---------- artefatos ----------
 
-  registrarArtefato(d) {
+  registrarArtefato(d, quando) {
     const chave = `${d.tipo}:${d.caminho ?? ''}`;
     const existente = this.artefatos.find((a) => a.chave === chave);
     if (existente) Object.assign(existente, d, { versao: (existente.versao ?? 1) + 1 });
     else this.artefatos.push({ ...d, chave, versao: d.versao ?? 1 });
     this.renderizarArtefatos();
     const autor = POR_ID[d.autor];
-    this.registrarSistema(`${autor ? autor.nome : 'O squad'} publicou: ${d.titulo ?? ROTULO_ARTEFATO[d.tipo]}${existente ? ` (v${existente.versao})` : ''}`);
+    this.registrarSistema(`${autor ? autor.nome : 'O squad'} publicou: ${d.titulo ?? ROTULO_ARTEFATO[d.tipo]}${existente ? ` (v${existente.versao})` : ''}`, { quando });
   }
 
   renderizarArtefatos() {
@@ -233,8 +243,11 @@ export class UI {
         dlg.close();
         if (d.tipo !== 'perguntas') this.marcarPasso(passo, decisao.aprovado ? 'feito' : 'ativo');
         this.status(decisao.aprovado === false ? 'Ajustes em andamento' : 'Decisão registrada, squad trabalhando');
-        if (d.tipo === 'perguntas') this.registrarSistema('Você respondeu as perguntas da Ana');
-        else this.registrarSistema(decisao.aprovado ? `Você aprovou: ${d.tipo === 'prd' ? 'PRD' : 'arquitetura'}` : `Você pediu ajustes: "${decisao.comentario}"`);
+        // Na esteira real o servidor registra a decisão; aqui só na demonstração.
+        if (typeof d.continuar === 'function') {
+          if (d.tipo === 'perguntas') this.registrarSistema('Você respondeu as perguntas da Ana');
+          else this.registrarSistema(decisao.aprovado ? `Você aprovou: ${d.tipo === 'prd' ? 'PRD' : 'arquitetura'}` : `Você pediu ajustes: "${decisao.comentario}"`);
+        }
         resolve(decisao);
       };
       this.pendente = { decidir };
@@ -276,9 +289,15 @@ export class UI {
   // ---------- entrega ----------
 
   fim(d) {
-    this.marcarPasso('delivery', 'feito');
-    this.status('Entregue');
     const dlg = $('#dlgEntrega');
+    dlg.querySelector('h2').textContent = d.escalado ? 'Projeto encerrado' : 'Solução entregue';
+    dlg.querySelector('.meta').textContent = d.escalado ? 'Sala 1 · Produto' : 'Sala 5 · Delivery';
+    if (d.escalado) {
+      this.status(STATUS_ETAPA.escalado);
+    } else {
+      this.marcarPasso('delivery', 'feito');
+      this.status('Entregue');
+    }
     dlg.querySelector('.conteudo').replaceChildren(
       el('p', { text: d.resumo ?? 'Solução entregue.' }),
       el('ul', { class: 'links' }, (d.links ?? []).map((l) => el('li', {},
@@ -306,6 +325,20 @@ export class UI {
 
   // ---------- projeto ----------
 
+  // Estado do projeto real (squad_projetos): status, faixa de erro e botão de retomar.
+  atualizarProjeto(p, { aoRetomar } = {}) {
+    if (STATUS_ETAPA[p.etapa]) this.status(STATUS_ETAPA[p.etapa]);
+    const faixa = $('#projetoErro');
+    faixa.hidden = !p.erro;
+    if (p.erro) {
+      faixa.replaceChildren(
+        el('span', { text: `A esteira parou: ${p.erro}` }),
+        el('button', { type: 'button', class: 'botao', onclick: aoRetomar }, 'Retomar'));
+    }
+    $('#projetoTokens').textContent = p.tokens_entrada != null
+      ? `${Math.round((p.tokens_entrada + p.tokens_saida) / 1000)} mil tokens` : '';
+  }
+
   iniciarProjeto(nome, modo) {
     $('#briefing').hidden = true;
     $('#projetoBarra').hidden = false;
@@ -325,11 +358,13 @@ export class UI {
     this.marcarPasso(null);
     $('#briefing').hidden = false;
     $('#projetoBarra').hidden = true;
+    $('#projetoErro').hidden = true;
+    $('#projetoTokens').textContent = '';
   }
 
   // ---------- projetos (nuvem) ----------
 
-  renderizarProjetos({ logado, membro, projetos, erro, aoEntrar }) {
+  renderizarProjetos({ logado, membro, projetos, erro, aoEntrar, aoAbrir }) {
     const caixa = $('#listaProjetos');
     if (!logado) {
       caixa.replaceChildren(el('div', { class: 'vazio' },
@@ -340,12 +375,13 @@ export class UI {
     if (erro) { caixa.replaceChildren(el('p', { class: 'vazio', text: erro })); return; }
     if (!membro) { caixa.replaceChildren(el('p', { class: 'vazio', text: 'Sua conta não tem acesso ao SquadTech.' })); return; }
     if (!projetos.length) {
-      caixa.replaceChildren(el('p', { class: 'vazio', text: 'Nenhum projeto ainda. Os projetos reais começam na Fase 1; por enquanto, use a demonstração.' }));
+      caixa.replaceChildren(el('p', { class: 'vazio', text: 'Nenhum projeto ainda. Descreva um briefing e clique em "Iniciar projeto".' }));
       return;
     }
     caixa.replaceChildren(el('ul', { class: 'projetos' }, projetos.map((p) => el('li', {},
-      el('strong', { text: p.nome }),
-      el('span', { text: `${p.etapa.replaceAll('_', ' ')} · ${new Date(p.criado_em).toLocaleDateString('pt-BR')}` }),
+      el('button', { type: 'button', class: 'projeto', onclick: () => aoAbrir(p.id) },
+        el('strong', { text: p.nome }),
+        el('span', { text: `${p.erro ? 'parado com erro' : (STATUS_ETAPA[p.etapa] ?? p.etapa.replaceAll('_', ' '))} · ${new Date(p.criado_em).toLocaleDateString('pt-BR')}` })),
       p.url_app ? el('a', { href: p.url_app, target: '_blank', rel: 'noopener' }, 'Abrir app') : null))));
   }
 }

@@ -122,6 +122,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 .projeto-barra .modo { font: 700 11px/1 var(--pixel); text-transform: uppercase; background: #2b2f48; color: var(--destaque-2); padding: 4px 8px; border-radius: 4px; }
 .projeto-barra .status { margin-left: auto; color: var(--texto-2); font-size: 12px; }
+.projeto-barra .tokens:not(:empty) { color: #6f6d86; font-size: 11px; border-left: 1px solid var(--borda); padding-left: 10px; }
+.faixa-erro { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--perigo); background: #3a1622; color: #ffd6df; border-radius: var(--raio); font-size: 13px; }
+.faixa-erro span { flex: 1; }
 
 .briefing {
   background: var(--cartao); border: 1px solid var(--borda); border-radius: var(--raio);
@@ -172,6 +175,7 @@ textarea:disabled { opacity: 0.4; }
 .fala p { margin: 3px 0 0; overflow-wrap: anywhere; }
 .sistema { display: flex; gap: 8px; align-items: baseline; justify-content: center; color: var(--texto-2); font-size: 12px; text-align: center; animation: entrar 0.25s ease-out; }
 .sistema p { margin: 0; padding: 3px 10px; border: 1px dashed var(--borda); border-radius: 999px; }
+.sistema.erro p { border-color: var(--perigo); color: #ffb3c4; }
 @keyframes entrar { from { opacity: 0; transform: translateY(4px); } }
 
 .artefatos { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -199,7 +203,10 @@ textarea:disabled { opacity: 0.4; }
 .equipe-sala li p { margin: 2px 0 0; color: var(--texto-2); font-size: 12px; }
 
 .projetos { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.projetos li { display: grid; background: var(--cartao); border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; }
+.projetos li { display: grid; gap: 4px; background: var(--cartao); border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; }
+.projetos li:hover { border-color: var(--destaque-2); }
+.projeto { display: grid; text-align: left; background: none; border: 0; padding: 0; cursor: pointer; }
+.projeto:focus-visible { outline: 2px solid var(--destaque-2); outline-offset: 4px; }
 .projetos span { color: var(--texto-2); font-size: 12px; }
 .projetos a { color: var(--destaque-2); font-size: 12px; }
 

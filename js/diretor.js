@@ -49,6 +49,36 @@ export class Diretor {
     if (minha === this.geracao) this.tocando = false;
   }
 
+  // Histórico de um projeto reaberto: só painel e trilha, sem animação nem portões.
+  aplicarInstantaneo(ev) {
+    const d = ev.dados ?? {};
+    const quando = ev.criado_em;
+    switch (ev.tipo) {
+      case 'fase':
+        this.motor.salaAtiva = ev.sala;
+        this.ui.definirFase(ev.sala);
+        if (ev.texto) this.ui.registrarSistema(ev.texto, { quando });
+        break;
+      case 'sistema':
+        this.ui.registrarSistema(ev.texto, { quando, erro: d.erro });
+        break;
+      case 'fala':
+        this.ui.registrarFala(ev, quando);
+        break;
+      case 'handoff':
+        this.ui.registrarFala({ ...ev, tipo: 'fala' }, quando);
+        break;
+      case 'artefato':
+        this.ui.registrarArtefato(d, quando);
+        break;
+      case 'fim':
+        this.ui.registrarSistema(ev.texto ?? 'Projeto concluído', { quando });
+        break;
+      default:
+        break; // estado, reunir e portões já decididos não deixam rastro no painel
+    }
+  }
+
   pausa(ms) {
     return esperar(ms / this.velocidade);
   }
@@ -69,7 +99,7 @@ export class Diretor {
         break;
 
       case 'sistema':
-        this.ui.registrarSistema(ev.texto);
+        this.ui.registrarSistema(ev.texto, { erro: d.erro });
         await this.pausa(700);
         break;
 
@@ -99,12 +129,25 @@ export class Diretor {
         const decisao = await this.ui.abrirPortao(ev);
         if (geracao !== this.geracao) return;
         if (ev.agente) this.motor.definirEmote(ev.agente, null);
-        if (typeof d.continuar === 'function') this.fila.unshift(...d.continuar(decisao));
+        if (typeof d.continuar === 'function') {
+          this.fila.unshift(...d.continuar(decisao)); // demonstração
+        } else if (this.aoDecidirPortao) {
+          try {
+            await this.aoDecidirPortao(ev, decisao); // esteira real: grava no servidor
+          } catch (e) {
+            this.ui.registrarSistema(`Não consegui registrar sua decisão: ${e.message}`, { erro: true });
+            this.fila.unshift(ev); // reabre o portão
+          }
+        }
         break;
       }
 
       case 'fim': {
         this.ui.fim(d);
+        if (d.escalado) {
+          this.motor.salaAtiva = null;
+          break;
+        }
         const todos = [...this.motor.agentes.keys()];
         for (const id of todos) this.motor.definirEmote(id, 'comemorando');
         await this.pausa(3500);

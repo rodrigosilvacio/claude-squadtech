@@ -21,8 +21,8 @@ Escritório em pixel art onde 11 agentes de IA levam um briefing até uma **apli
 | Fase | Entrega | Status |
 |---|---|---|
 | 0 · Fundação | Escritório visual, tabelas `squad_*`, login, demonstração encenada | ✅ |
-| 1 · Produto | Sala 1 real + Portão 1 | Próxima |
-| 2 · Arquitetura | Sala 2 real + Portão 2 | |
+| 1 · Produto | Sala 1 real (Ana e Bruno na Claude API) + Portão 1 | ✅ |
+| 2 · Arquitetura | Sala 2 real + Portão 2 | Próxima |
 | 3 · Dev + Delivery | Commit em `projetos/` | |
 | 4 · Testes + Dados | QA no navegador + migrações | |
 
@@ -43,6 +43,9 @@ js/
   main.js             liga tudo
 vendor/               supabase-js, marked e DOMPurify com versão fixa
 supabase/migrations/  SQL aplicado no projeto ClaudeProjects
+supabase/functions/
+  squad-pedir/        ações do usuário (criar, responder, decidir, retomar), com login
+  squad-esteira/      executa um passo da esteira por invocação (chamada pelo banco)
 projetos/             apps entregues pelo squad (um por pasta)
 ```
 
@@ -52,6 +55,16 @@ projetos/             apps entregues pelo squad (um por pasta)
 python3 -m http.server 8000
 # abra http://localhost:8000
 ```
+
+## Como a esteira roda
+
+1. O navegador chama `squad-pedir` (usuário logado e presente em `squad_usuarios`).
+2. Mudanças de `etapa`/`subpasso` em `squad_projetos` disparam um trigger, que chama `squad-esteira` via `pg_net`.
+3. A esteira executa **um** passo (uma chamada ao `claude-opus-5-5`, cabe em ~150s), grava eventos e avança o projeto.
+4. O escritório recebe os eventos por Realtime (com polling de segurança a cada 6s) e anima a conversa.
+5. O cron `squad-reenviar-paradas` (a cada 2 min) reenvia passos parados; depois de 3 tentativas, o projeto mostra "Retomar".
+
+Sala 1 (Produto): `ana_analisa → bruno_critica → ana_pergunta → [suas respostas] → bruno_escreve → ana_revisa → bruno_ajusta → [Portão 1]`.
 
 ## Eventos
 

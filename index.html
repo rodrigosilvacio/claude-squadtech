@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SquadTech · Escritório de Agentes</title>
+  <meta name="description" content="Escritório em pixel art onde 11 agentes de IA levam um briefing até uma aplicação web funcionando, com aprovação humana do PRD e da arquitetura.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Crect width='8' height='8' fill='%2315151f'/%3E%3Crect x='1' y='1' width='3' height='3' fill='%23f4a261'/%3E%3Crect x='4' y='1' width='3' height='3' fill='%237cc6fe'/%3E%3Crect x='1' y='4' width='3' height='3' fill='%2380ed99'/%3E%3Crect x='4' y='4' width='3' height='3' fill='%23c77dff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Pixelify+Sans:wght@500;700&display=swap">
+  <link rel="stylesheet" href="css/escritorio.css">
+  <script src="vendor/supabase-2.110.5.js" defer></script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <span class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+      <div>
+        <h1>SquadTech</h1>
+        <p>escritório de agentes de desenvolvimento</p>
+      </div>
+    </div>
+    <ol class="trilha" id="trilha" aria-label="Fases do projeto"></ol>
+    <div class="acoes">
+      <label class="velocidade" id="velocidadeCaixa" hidden>
+        Velocidade
+        <select id="velocidade">
+          <option value="1">1x</option>
+          <option value="2">2x</option>
+          <option value="4">4x</option>
+        </select>
+      </label>
+      <button type="button" class="botao" id="btnPendente" hidden>Decisão pendente</button>
+      <button type="button" class="botao primario" id="btnNovo">+ Novo projeto</button>
+      <button type="button" class="botao" id="btnConta">Entrar</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="palco" aria-label="Escritório">
+      <div class="projeto-barra" id="projetoBarra" hidden>
+        <span class="modo" id="projetoModo"></span>
+        <strong id="projetoNome"></strong>
+        <span class="status" id="projetoStatus"></span>
+      </div>
+      <div class="moldura">
+        <canvas id="escritorio" role="img" aria-label="Escritório em pixel art com 5 salas: Produto, Arquitetura, Desenvolvimento, Testes e Delivery, e 11 agentes trabalhando"></canvas>
+        <div class="tooltip" id="tooltip" hidden></div>
+      </div>
+
+      <form class="briefing" id="briefing">
+        <h2>Qual solução vamos construir?</h2>
+        <p class="sub">Descreva o projeto. A Ana vai ler, fazer perguntas e o squad leva até uma aplicação web funcionando, com sua aprovação no PRD e na arquitetura.</p>
+        <label for="nomeProjeto" class="rotulo">Nome do projeto</label>
+        <input id="nomeProjeto" maxlength="120" required placeholder="Ex.: Reembolso de visitas comerciais">
+        <label for="textoBriefing" class="rotulo">Briefing</label>
+        <textarea id="textoBriefing" rows="4" maxlength="6000" required placeholder="Qual problema resolve, quem vai usar, o que precisa fazer e o que não pode faltar."></textarea>
+        <div class="linha">
+          <p class="aviso" id="avisoModo"></p>
+          <button type="button" class="botao" id="btnDemo">Ver demonstração</button>
+          <button type="submit" class="botao primario" id="btnIniciar">Iniciar projeto</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="lateral">
+      <div class="abas" role="tablist">
+        <button type="button" role="tab" data-aba="conversa" aria-selected="true">Conversa</button>
+        <button type="button" role="tab" data-aba="artefatos" aria-selected="false">Artefatos <span class="contador" id="contadorArtefatos"></span></button>
+        <button type="button" role="tab" data-aba="equipe" aria-selected="false">Equipe</button>
+        <button type="button" role="tab" data-aba="projetos" aria-selected="false">Projetos</button>
+      </div>
+
+      <div class="painel" id="painel-conversa" role="tabpanel">
+        <div class="filtros" id="filtros" aria-label="Filtrar por sala"></div>
+        <p class="vazio" id="vazioConversa">Quando um projeto começar, a conversa entre os agentes aparece aqui, em tempo real.</p>
+        <ol class="conversa" id="conversa" aria-live="polite"></ol>
+      </div>
+      <div class="painel" id="painel-artefatos" role="tabpanel" hidden>
+        <p class="vazio" id="vazioArtefatos">Briefing, PRD, arquitetura, código e relatórios aparecem aqui conforme o squad produz.</p>
+        <ul class="artefatos" id="artefatos"></ul>
+      </div>
+      <div class="painel" id="painel-equipe" role="tabpanel" hidden>
+        <div id="equipe"></div>
+      </div>
+      <div class="painel" id="painel-projetos" role="tabpanel" hidden>
+        <div id="listaProjetos"></div>
+      </div>
+    </aside>
+  </main>
+
+  <dialog id="dlgPortao" class="dialogo largo" aria-labelledby="tituloPortao">
+    <header><div><h2 id="tituloPortao"></h2><p class="meta"></p></div><button type="button" class="fechar" data-fechar aria-label="Fechar (a decisão continua pendente)">×</button></header>
+    <div class="conteudo"></div>
+    <footer class="rodape"></footer>
+  </dialog>
+
+  <dialog id="dlgArtefato" class="dialogo largo" aria-labelledby="tituloArtefato">
+    <header><div><h2 id="tituloArtefato"></h2><p class="meta"></p></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
+    <div class="conteudo"></div>
+  </dialog>
+
+  <dialog id="dlgEntrega" class="dialogo" aria-labelledby="tituloEntrega">
+    <header><div><h2 id="tituloEntrega">Solução entregue</h2><p class="meta">Sala 5 · Delivery</p></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
+    <div class="conteudo"></div>
+  </dialog>
+
+  <dialog id="dlgLogin" class="dialogo estreito" aria-labelledby="tituloLogin">
+    <header><div><h2 id="tituloLogin">Entrar no SquadTech</h2><p class="meta">Use sua conta do Supabase</p></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
+    <form id="formLogin" class="conteudo formulario">
+      <label for="email" class="rotulo">E-mail</label>
+      <input id="email" type="email" autocomplete="username" required>
+      <label for="senha" class="rotulo">Senha</label>
+      <input id="senha" type="password" autocomplete="current-password" required>
+      <p class="erro" id="erroLogin" role="alert"></p>
+      <button type="submit" class="botao primario">Entrar</button>
+    </form>
+  </dialog>
+</body>
+</html>

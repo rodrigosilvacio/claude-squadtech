@@ -203,7 +203,7 @@ async function devArquivo(p: Projeto) {
   const agente = donoDo(plano, caminho);
   const gerados = await arquivosGerados(p);
   const atual = gerados.get(caminho);
-  const tarefa = atual
+  const tarefa = atual && p.ciclo > 1
     ? `\nVersão em produção do seu arquivo:\n--- ${caminho} ---\n${atual.conteudo}\n\nTarefa: devolva o arquivo ${caminho} completo e atualizado para a evolução (até ${cfg.max_caracteres_arquivo} caracteres), mudando só o necessário e preservando o que já funciona.`
     : `\nTarefa: escreva o arquivo ${caminho} completo (até ${cfg.max_caracteres_arquivo} caracteres).`;
   await estado(p, agente, 'digitando');

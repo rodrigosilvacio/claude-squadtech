@@ -62,7 +62,7 @@ async function projetoDoUsuario(userId: string, id: unknown) {
 
 // ---------- ações ----------
 
-async function criar(userId: string, corpo: Record<string, unknown>) {
+async function criar(userId: string, papel: string, corpo: Record<string, unknown>) {
   const nome = String(corpo.nome ?? '').trim();
   const briefing = String(corpo.briefing ?? '').trim();
   if (nome.length < 3 || nome.length > 120) throw new Recusa('Dê um nome ao projeto (3 a 120 caracteres).');
@@ -70,15 +70,19 @@ async function criar(userId: string, corpo: Record<string, unknown>) {
   if (briefing.length > 6000) throw new Recusa('O briefing passou de 6000 caracteres.');
 
   const cfg = await config();
+  const convidado = papel === 'convidado';
+  const limite = Number(convidado ? cfg.limite_projetos_dia_convidado : cfg.limite_projetos_dia);
   const desde = new Date(Date.now() - 24 * 3600_000).toISOString();
   const { count } = await servico.from('squad_projetos').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('criado_em', desde);
-  if ((count ?? 0) >= Number(cfg.limite_projetos_dia)) {
-    throw new Recusa(`Limite de ${cfg.limite_projetos_dia} projetos em 24 horas atingido.`, 429);
+  if ((count ?? 0) >= limite) {
+    throw new Recusa(convidado
+      ? `A conta convidada já criou ${limite} projetos nas últimas 24 horas. Tente de novo amanhã ou acompanhe os projetos já criados.`
+      : `Limite de ${limite} projetos em 24 horas atingido.`, 429);
   }
 
   const slug = await slugLivre(slugificar(nome));
   const { data: p, error } = await servico.from('squad_projetos')
-    .insert({ user_id: userId, nome, slug, briefing, etapa: 'entrevista' }).select('id, nome, slug').single();
+    .insert({ user_id: userId, nome, slug, briefing, etapa: 'entrevista', teto_tokens: convidado ? Number(cfg.teto_tokens_convidado) : null }).select('id, nome, slug').single();
   if (error) throw error;
 
   await servico.from('squad_artefatos').insert({ projeto_id: p.id, tipo: 'briefing', conteudo: `# Briefing\n\n**${nome}**\n\n${briefing}` });
@@ -251,7 +255,7 @@ Deno.serve(async (req) => {
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
   const { data: auth } = await servico.auth.getUser(token);
   if (!auth?.user) return json({ erro: 'Entre na sua conta.' }, 401);
-  const { data: membro } = await servico.from('squad_usuarios').select('user_id').eq('user_id', auth.user.id).maybeSingle();
+  const { data: membro } = await servico.from('squad_usuarios').select('user_id, papel').eq('user_id', auth.user.id).maybeSingle();
   if (!membro) return json({ erro: 'Sua conta não tem acesso ao SquadTech.' }, 403);
 
   let corpo: Record<string, unknown>;
@@ -262,7 +266,7 @@ Deno.serve(async (req) => {
   }
   try {
     switch (corpo.acao) {
-      case 'criar': return await criar(auth.user.id, corpo);
+      case 'criar': return await criar(auth.user.id, membro.papel, corpo);
       case 'responder': return await responder(auth.user.id, corpo);
       case 'decidir': return await decidir(auth.user.id, corpo);
       case 'retomar': return await retomar(auth.user.id, corpo);

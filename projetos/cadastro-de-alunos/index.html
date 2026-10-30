@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Cadastro privado de alunos do professor">
+  <title>Cadastro de Alunos</title>
+  <link rel="stylesheet" href="./css/estilo.css">
+</head>
+<body>
+  <main>
+    <section id="tela-login" aria-labelledby="titulo-login" hidden>
+      <h1 id="titulo-login">Cadastro de Alunos</h1>
+      <p class="finalidade">Acesso restrito ao professor.</p>
+
+      <form id="form-login" novalidate>
+        <h2>Entrar</h2>
+        <div class="campo">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" name="email" autocomplete="username" aria-describedby="erro-login" required>
+        </div>
+        <div class="campo">
+          <label for="login-senha">Senha</label>
+          <input type="password" id="login-senha" name="senha" autocomplete="current-password" aria-describedby="erro-login" required>
+        </div>
+        <button type="submit" id="btn-entrar">Entrar</button>
+        <button type="button" id="link-esqueci">Esqueci minha senha</button>
+      </form>
+
+      <form id="form-nova-senha" novalidate hidden>
+        <h2>Definir nova senha</h2>
+        <div class="campo">
+          <label for="nova-senha">Nova senha (mínimo 6 caracteres)</label>
+          <input type="password" id="nova-senha" name="nova-senha" autocomplete="new-password" minlength="6" aria-describedby="erro-login" required>
+        </div>
+        <button type="submit" id="btn-nova-senha">Salvar nova senha</button>
+      </form>
+
+      <p id="erro-login" role="alert" aria-live="assertive"></p>
+    </section>
+
+    <div id="mensagem" role="status" aria-live="polite"></div>
+
+    <section id="tela-alunos" aria-labelledby="titulo-alunos" hidden>
+      <header class="cabecalho">
+        <h1 id="titulo-alunos">Alunos</h1>
+        <button type="button" id="btn-sair">Sair</button>
+      </header>
+
+      <p class="finalidade">Nome e email dos alunos são usados só para contato acadêmico. A exclusão é definitiva e atende pedidos do titular dos dados.</p>
+
+      <div class="barra-acoes">
+        <div class="busca">
+          <label for="campo-busca">Pesquisar</label>
+          <input type="search" id="campo-busca" name="busca" placeholder="Nome ou email" autocomplete="off" aria-controls="lista-alunos">
+        </div>
+        <button type="button" id="btn-novo">Novo aluno</button>
+        <button type="button" id="btn-exportar">Exportar CSV</button>
+      </div>
+
+      <span id="total-alunos" aria-live="polite">0 alunos</span>
+
+      <ul id="lista-alunos" aria-label="Lista de alunos"></ul>
+      <p id="lista-vazia" hidden>Nenhum aluno encontrado</p>
+    </section>
+  </main>
+
+  <dialog id="form-aluno" aria-labelledby="titulo-form-aluno">
+    <form method="dialog" novalidate>
+      <h2 id="titulo-form-aluno">Novo aluno</h2>
+      <div class="campo">
+        <label for="campo-nome">Nome</label>
+        <input type="text" id="campo-nome" name="nome" maxlength="200" autocomplete="off" aria-describedby="erro-nome" required>
+        <p id="erro-nome" aria-live="assertive"></p>
+      </div>
+      <div class="campo">
+        <label for="campo-email">Email</label>
+        <input type="email" id="campo-email" name="email" autocomplete="off" aria-describedby="erro-email" required>
+        <p id="erro-email" aria-live="assertive"></p>
+      </div>
+      <div class="botoes">
+        <button type="button" id="btn-cancelar">Cancelar</button>
+        <button type="submit" id="btn-salvar">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

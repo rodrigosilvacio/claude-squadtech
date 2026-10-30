@@ -58,6 +58,7 @@ function contarPresentes(inscritos, presencas) {
 export async function telaCheckin(el, sessaoId) {
   el.innerHTML = '';
   const estado = { sessao: null, inscritos: [], presencas: new Map(), busca: '', operacoes: 0, ativo: true };
+  let seq = 0;
 
   const tela = criar('section', { classe: 'tela', id: 'ses-tela', attrs: { 'aria-labelledby': 'ses-titulo' } });
   const voltar = criar('a', { classe: 'btn', id: 'ses-voltar', texto: 'Voltar ao workshop', attrs: { href: '#/workshops' } });
@@ -197,13 +198,14 @@ export async function telaCheckin(el, sessaoId) {
     }
   }
 
-  async function recarregar(completo) {
+  // Sempre recarrega inscritos (até 40) e descarta respostas que chegaram fora de ordem.
+  async function recarregar() {
     if (!estado.ativo) return;
+    const minha = ++seq;
     try {
       const sessao = await obterSessao(sessaoId);
-      const inscritos = completo || !estado.sessao ? await listarInscritos(sessao.workshop_id) : estado.inscritos;
-      const presencas = await listarPresencas(sessaoId);
-      if (!estado.ativo || estado.operacoes > 0) return; // não sobrescreve marcação em andamento
+      const [inscritos, presencas] = await Promise.all([listarInscritos(sessao.workshop_id), listarPresencas(sessaoId)]);
+      if (!estado.ativo || minha !== seq || estado.operacoes > 0) return;
       estado.sessao = sessao;
       estado.inscritos = inscritos;
       estado.presencas = new Map(presencas.map((x) => [x.participante_id, x]));
@@ -211,7 +213,7 @@ export async function telaCheckin(el, sessaoId) {
       renderCabecalho();
       renderLista();
     } catch (e) {
-      if (!estado.sessao) status.textContent = msgErro(e);
+      if (minha === seq && !estado.sessao) status.textContent = msgErro(e);
     }
   }
 
@@ -230,7 +232,7 @@ export async function telaCheckin(el, sessaoId) {
       const r = await upsertInscrito(estado.sessao.workshop_id, { nome, email, empresa: inEmpresa.value });
       form.reset();
       avisar(r === 'atualizado' ? 'Participante já existia e foi atualizado.' : 'Participante adicionado.', 'sucesso');
-      await recarregar(true);
+      await recarregar();
       busca.value = nome; estado.busca = nome; renderLista();
     } catch (e) {
       msgForm.textContent = msgErro(e);
@@ -248,7 +250,7 @@ export async function telaCheckin(el, sessaoId) {
       try { await limparPedidosSessao(sessaoId); } catch (e) { console.error(e); }
       avisarSessoes();
       avisar('Sessão encerrada.', 'sucesso');
-      await recarregar(true);
+      await recarregar();
     } catch (e) {
       avisar(msgErro(e), 'erro');
     } finally {
@@ -262,7 +264,7 @@ export async function telaCheckin(el, sessaoId) {
       await reabrirSessao(sessaoId);
       avisarSessoes();
       avisar('Sessão reaberta. O QR voltou a aceitar check-ins.', 'sucesso');
-      await recarregar(true);
+      await recarregar();
     } catch (e) {
       avisar(msgErro(e), 'erro');
     } finally {
@@ -277,7 +279,7 @@ export async function telaCheckin(el, sessaoId) {
       await renovarToken(sessaoId);
       avisarSessoes();
       avisar('Novo QR gerado. Projete de novo.', 'sucesso');
-      await recarregar(false);
+      await recarregar();
     } catch (e) {
       avisar(msgErro(e), 'erro');
     } finally {
@@ -287,11 +289,11 @@ export async function telaCheckin(el, sessaoId) {
 
   const aoMudar = (ev) => {
     const ids = ev && ev.detail && ev.detail.sessaoIds;
-    if (!Array.isArray(ids) || !ids.length || ids.includes(sessaoId)) recarregar(false);
+    if (!Array.isArray(ids) || !ids.length || ids.includes(sessaoId)) recarregar();
   };
   window.addEventListener('sq:presencas', aoMudar);
-  await recarregar(true);
-  const timer = setInterval(() => recarregar(false), INTERVALO_MS);
+  await recarregar();
+  const timer = setInterval(recarregar, INTERVALO_MS);
 
   return () => {
     estado.ativo = false;
@@ -306,7 +308,7 @@ export async function telaQr(el, sessaoId) {
   el.innerHTML = '';
   let ativo = true;
   let tokenAtual = null;
-  let inscritos = [];
+  let seq = 0;
 
   const tela = criar('section', { classe: 'qr-tela', id: 'qr-tela', attrs: { 'aria-labelledby': 'qr-titulo' } });
   const btnVoltar = botao('Voltar', '', 'qr-voltar');
@@ -347,11 +349,11 @@ export async function telaQr(el, sessaoId) {
 
   async function atualizar() {
     if (!ativo) return;
+    const minha = ++seq;
     try {
       const sessao = await obterSessao(sessaoId);
-      if (!inscritos.length || tokenAtual === null) inscritos = await listarInscritos(sessao.workshop_id);
-      const presencas = await listarPresencas(sessaoId);
-      if (!ativo) return;
+      const [inscritos, presencas] = await Promise.all([listarInscritos(sessao.workshop_id), listarPresencas(sessaoId)]);
+      if (!ativo || minha !== seq) return;
       titulo.textContent = sessao.nome || 'Sessão';
       contador.textContent = 'Presentes ' + contarPresentes(inscritos, presencas) + ' de ' + inscritos.length;
       if (!sessao.aberta) {

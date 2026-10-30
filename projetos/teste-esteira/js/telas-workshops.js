@@ -1,5 +1,5 @@
 // Telas de login (RF1), workshops (RF2, RF10, RF12) e inscritos (RF3, RF4, RF5, RF13).
-import { entrar } from './supabase.js';
+import { supabase, entrar } from './supabase.js';
 import {
   listarWorkshops, salvarWorkshop, excluirWorkshop, listarSessoes, salvarSessao, excluirSessao,
   listarInscritos, upsertInscrito, excluirParticipante, taxaPresenca, linhasExportacao
@@ -76,14 +76,17 @@ export function telaLogin(el) {
   const inEmail = campo(form, 'login-email', 'E-mail', 'email', { autocomplete: 'email', inputmode: 'email', required: '', maxlength: '254' });
   const inSenha = campo(form, 'login-senha', 'Senha', 'password', { autocomplete: 'current-password', required: '' });
   const msg = criar('p', { classe: 'erro', id: 'login-msg', attrs: { role: 'alert' } });
+  const info = criar('p', { classe: 'sucesso', id: 'login-info', attrs: { role: 'status', 'aria-live': 'polite' } });
   const btn = botao('Entrar', 'btn-primario btn-grande', 'login-enviar', 'submit');
-  form.append(msg, btn);
+  const btnEsqueci = botao('Esqueci minha senha', '', 'login-esqueci');
+  form.append(msg, info, linhaBotoes([btn, btnEsqueci]));
   cartao.appendChild(form);
   tela.appendChild(cartao);
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     msg.textContent = '';
+    info.textContent = '';
     if (!emailValido(inEmail.value)) { msg.textContent = 'Digite um e-mail válido.'; inEmail.focus(); return; }
     if (!inSenha.value) { msg.textContent = 'Digite sua senha.'; inSenha.focus(); return; }
     btn.disabled = true;
@@ -93,6 +96,24 @@ export function telaLogin(el) {
     } catch (e) {
       msg.textContent = msgErro(e);
       btn.disabled = false;
+    }
+  });
+
+  btnEsqueci.addEventListener('click', async () => {
+    msg.textContent = '';
+    info.textContent = '';
+    const email = inEmail.value.trim().toLowerCase();
+    if (!emailValido(email)) { msg.textContent = 'Digite seu e-mail para receber o link de nova senha.'; inEmail.focus(); return; }
+    btnEsqueci.disabled = true;
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+      if (error && navigator.onLine === false) throw error;
+      // Mensagem neutra: não revela se o e-mail tem conta.
+      info.textContent = 'Se o e-mail estiver cadastrado, você vai receber um link para criar uma nova senha.';
+    } catch (e) {
+      msg.textContent = 'Não foi possível conectar. Tente de novo.';
+    } finally {
+      btnEsqueci.disabled = false;
     }
   });
   inEmail.focus();

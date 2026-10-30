@@ -125,6 +125,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .projeto-barra .tokens:not(:empty) { color: #6f6d86; font-size: 11px; border-left: 1px solid var(--borda); padding-left: 10px; }
 .faixa-erro { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--perigo); background: #3a1622; color: #ffd6df; border-radius: var(--raio); font-size: 13px; }
 .faixa-erro span { flex: 1; }
+.links-projeto { display: flex; gap: 10px; }
+.links-projeto:empty { display: none; }
+.links-projeto a, .link { color: var(--destaque-2); font-size: 12px; font-weight: 600; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
 
 .briefing {
   background: var(--cartao); border: 1px solid var(--borda); border-radius: var(--raio);

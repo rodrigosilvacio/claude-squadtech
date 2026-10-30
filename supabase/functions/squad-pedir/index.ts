@@ -15,7 +15,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const ETAPAS_AUTOMATICAS = ['entrevista', 'prd', 'arquitetura', 'migracao'];
+const ETAPAS_AUTOMATICAS = ['entrevista', 'prd', 'arquitetura', 'migracao', 'planejamento', 'desenvolvimento', 'integracao', 'delivery'];
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

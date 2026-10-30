@@ -81,6 +81,15 @@ export const nuvem = {
     }
   },
 
+  // Última versão de cada arquivo da entrega (código e docs), para montar o zip.
+  async arquivosDaEntrega(projetoId) {
+    const { data, error } = await cliente.from('squad_artefatos')
+      .select('caminho, versao, conteudo').eq('projeto_id', projetoId)
+      .in('tipo', ['arquivo', 'entrega']).not('caminho', 'is', null).order('versao');
+    if (error) throw error;
+    return new Map(data.map((a) => [a.caminho, a.conteudo]));
+  },
+
   // Avisa quando chega evento novo ou o projeto muda. Devolve a função que cancela.
   assinar(projetoId, aoMudar) {
     const canal = cliente.channel(`squad-${projetoId}`)

@@ -99,6 +99,26 @@ async function retomar() {
   }
 }
 
+// Zip montado no navegador com a última versão de cada arquivo da entrega.
+ui.aoBaixarZip = async () => {
+  if (!sessao || !window.JSZip) return;
+  try {
+    const projeto = await nuvem.projeto(sessao.id);
+    const arquivos = await nuvem.arquivosDaEntrega(sessao.id);
+    const zip = new window.JSZip();
+    const pasta = zip.folder(projeto.slug);
+    for (const [caminho, conteudo] of arquivos) pasta.file(caminho, conteudo);
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${projeto.slug}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+  } catch (e) {
+    ui.registrarSistema(`Não consegui montar o zip: ${e.message}`, { erro: true });
+  }
+};
+
 // Decisões dos portões viram pedidos ao servidor; a esteira continua sozinha.
 diretor.aoDecidirPortao = async (ev, decisao) => {
   if (!sessao) return;

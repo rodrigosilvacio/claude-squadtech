@@ -1,0 +1,226 @@
+// Sala 3 · Desenvolvimento (Eduardo, Fernanda, Gabriel e Helena)
+//   planejamento:    eduardo_planeja (contrato de integração + ordem dos arquivos)
+//   desenvolvimento: dev_arquivo (um arquivo por invocação, pelo dono da tarefa)
+//   integracao:      eduardo_integra → [dev_corrige, um arquivo por invocação] → delivery
+// Cada arquivo é gerado numa chamada própria para caber no tempo de uma invocação.
+import { atualizar, config, emitir, estado, fala, perguntar, type Projeto, supabase, ultimoArtefato } from './nucleo.ts';
+import { devPrompt, EDUARDO, FORMATO_ARQUIVO, FORMATO_EDUARDO_PLANO, FORMATO_EDUARDO_REVISAO } from './prompts.ts';
+import { type Plano, regras } from './sala-arquitetura.ts';
+import { type Problema, verificarArquivos } from './verificacoes.ts';
+
+const NOME: Record<string, string> = { eduardo: 'Eduardo', fernanda: 'Fernanda', gabriel: 'Gabriel', helena: 'Helena' };
+const ORCAMENTO_CONTEXTO = 90_000; // caracteres de código já pronto mandados junto com cada arquivo
+
+interface Nota { caminho: string; instrucoes: string }
+interface Ponto { arquivo: string; problema: string; correcao: string }
+
+export async function carregarPlano(p: Projeto): Promise<{ plano: Plano; doc: string; prd: string }> {
+  const [pl, doc, prd] = await Promise.all([ultimoArtefato(p, 'plano', true), ultimoArtefato(p, 'arquitetura', true), ultimoArtefato(p, 'prd', true)]);
+  if (!pl || !doc || !prd) throw new Error('PRD ou arquitetura aprovados não encontrados.');
+  return { plano: JSON.parse(pl.conteudo) as Plano, doc: doc.conteudo, prd: prd.conteudo };
+}
+
+// Última versão de cada arquivo de código gerado.
+export async function arquivosGerados(p: Projeto): Promise<Map<string, { conteudo: string; versao: number }>> {
+  const { data, error } = await supabase.from('squad_artefatos').select('caminho, versao, conteudo')
+    .eq('projeto_id', p.id).eq('tipo', 'arquivo').order('versao');
+  if (error) throw error;
+  const mapa = new Map<string, { conteudo: string; versao: number }>();
+  for (const a of data) mapa.set(a.caminho, { conteudo: a.conteudo, versao: a.versao });
+  return mapa;
+}
+
+const conteudos = (m: Map<string, { conteudo: string }>) => new Map([...m].map(([k, v]) => [k, v.conteudo]));
+const donoDo = (plano: Plano, caminho: string) => plano.tarefas.find((t) => t.arquivos.includes(caminho))?.agente ?? 'eduardo';
+
+// Código já pronto, inteiro enquanto couber no orçamento; depois, só as linhas de export.
+function codigoPronto(gerados: Map<string, { conteudo: string }>, ordem: string[], exceto: string): string {
+  let usado = 0;
+  const blocos: string[] = [];
+  for (const caminho of ordem) {
+    const g = gerados.get(caminho);
+    if (!g || caminho === exceto) continue;
+    let corpo = g.conteudo;
+    if (usado + corpo.length > ORCAMENTO_CONTEXTO) {
+      corpo = corpo.split('\n').filter((l) => /^\s*export\b|\bid=|<script|<link/.test(l)).join('\n') + '\n/* (conteúdo resumido: só exports e referências) */';
+    }
+    usado += corpo.length;
+    blocos.push(`--- ${caminho} ---\n${corpo}`);
+  }
+  return blocos.length ? blocos.join('\n\n') : '(nenhum arquivo pronto ainda)';
+}
+
+export async function salvarArquivo(p: Projeto, caminho: string, conteudo: string, autor: string, versao: number) {
+  const { error } = await supabase.from('squad_artefatos').insert({ projeto_id: p.id, tipo: 'arquivo', caminho, versao, conteudo, autor });
+  if (error) throw error;
+  await emitir(p, 'artefato', autor, null, { dados: { tipo: 'arquivo', caminho, titulo: caminho, autor, formato: 'codigo', conteudo, versao } });
+}
+
+const semCercas = (s: string) => s.replace(/^\s*```[a-z]*\n/i, '').replace(/\n```\s*$/, '');
+
+// ---------- planejamento ----------
+
+async function eduardoPlaneja(p: Projeto) {
+  const { plano, doc, prd } = await carregarPlano(p);
+  await estado(p, 'eduardo', 'lendo');
+  const r = await perguntar<{ fala_para_time: string; contrato_markdown: string; ordem: string[]; notas: Nota[] }>(p, EDUARDO,
+    `<prd>\n${prd}\n</prd>\n\n<arquitetura>\n${doc}\n</arquitetura>\n\n${await regras(p)}\n\nTarefa: prepare o time antes de qualquer código.\n1. "contrato_markdown": o contrato de integração que todos vão seguir: ids e classes do HTML que o JavaScript usa (tabela id → arquivo que usa), formato dos objetos trocados entre módulos (campos e tipos), como as telas são mostradas e escondidas, eventos entre módulos, mensagens de erro padrão e ordem de carregamento dos scripts. Seja concreto.\n2. "ordem": todos os caminhos de arquivo do plano, das dependências para quem depende delas (ex.: CSS e módulos de dados antes do módulo que integra; index.html por último).\n3. "notas": instruções específicas para cada arquivo, se houver.\n4. "fala_para_time": abra a reunião com o time em uma frase.`,
+    FORMATO_EDUARDO_PLANO, 'low', 9000);
+  const caminhos = plano.arquivos.map((a) => a.caminho);
+  const ordem = [...new Set([...r.ordem.filter((c) => caminhos.includes(c)), ...caminhos])];
+
+  const { error } = await supabase.from('squad_tarefas').upsert(
+    plano.tarefas.map((t, i) => ({ projeto_id: p.id, rodada: 1, n: i + 1, titulo: t.titulo, descricao: t.descricao, agente: t.agente, arquivos: t.arquivos, status: 'pendente' })),
+    { onConflict: 'projeto_id,rodada,n' },
+  );
+  if (error) throw error;
+  await supabase.from('squad_artefatos').delete().eq('projeto_id', p.id).eq('tipo', 'plano').eq('caminho', 'contrato-integracao');
+  await supabase.from('squad_artefatos').insert({ projeto_id: p.id, tipo: 'plano', caminho: 'contrato-integracao', versao: 1, conteudo: r.contrato_markdown, autor: 'eduardo' });
+  await emitir(p, 'artefato', 'eduardo', null, { dados: { tipo: 'plano', caminho: 'contrato-integracao', titulo: 'Contrato de integração', autor: 'eduardo', conteudo: r.contrato_markdown } });
+
+  const devs = [...new Set(['eduardo', ...plano.tarefas.map((t) => t.agente)])];
+  await emitir(p, 'reunir', 'eduardo', null, { dados: { agentes: devs } });
+  await fala(p, 'eduardo', devs.find((d) => d !== 'eduardo') ?? 'fernanda', r.fala_para_time);
+  for (const t of plano.tarefas) {
+    if (t.agente === 'eduardo') continue;
+    await fala(p, t.agente, 'eduardo', `Fico com ${t.titulo.toLowerCase()}: ${t.arquivos.join(', ')}.`);
+  }
+  await atualizar(p, {
+    etapa: 'desenvolvimento', subpasso: 'dev_arquivo', passo_em: null, tentativas: 0,
+    rascunho: { contrato: r.contrato_markdown, notas: r.notas, ordem, feitos: [] },
+  });
+}
+
+// ---------- desenvolvimento ----------
+
+async function pedidoArquivo(p: Projeto, caminho: string, extra: string, gerados: Map<string, { conteudo: string }>) {
+  const { plano, doc, prd } = await carregarPlano(p);
+  const ordem = (p.rascunho.ordem as string[]) ?? plano.arquivos.map((a) => a.caminho);
+  const notas = ((p.rascunho.notas as Nota[]) ?? []).filter((n) => n.caminho === caminho).map((n) => n.instrucoes).join('\n');
+  const arquivo = plano.arquivos.find((a) => a.caminho === caminho);
+  return `<prd>\n${prd}\n</prd>\n\n<arquitetura>\n${doc}\n</arquitetura>\n\n${await regras(p)}\n\nContrato de integração do Eduardo:\n${p.rascunho.contrato ?? '(sem contrato)'}\n\nCódigo já pronto dos colegas:\n${codigoPronto(gerados, ordem, caminho)}\n\nSeu arquivo: ${caminho}\nResponsabilidade: ${arquivo?.responsabilidade ?? '-'}\nExporta: ${arquivo?.exporta.join('; ') || '-'}\n${notas ? `Notas do Eduardo: ${notas}\n` : ''}${extra}`;
+}
+
+async function devArquivo(p: Projeto) {
+  const { plano } = await carregarPlano(p);
+  const cfg = await config();
+  const ordem = p.rascunho.ordem as string[];
+  const feitos = (p.rascunho.feitos as string[]) ?? [];
+  const caminho = ordem.find((c) => !feitos.includes(c));
+  if (!caminho) {
+    await irParaIntegracao(p);
+    return;
+  }
+  const agente = donoDo(plano, caminho);
+  const gerados = await arquivosGerados(p);
+  await estado(p, agente, 'digitando');
+  const r = await perguntar<{ conteudo: string; fala_para_eduardo: string }>(p, devPrompt(agente),
+    await pedidoArquivo(p, caminho, `\nTarefa: escreva o arquivo ${caminho} completo (até ${cfg.max_caracteres_arquivo} caracteres).`, gerados),
+    FORMATO_ARQUIVO, 'low', 12000);
+  await salvarArquivo(p, caminho, semCercas(r.conteudo), agente, (gerados.get(caminho)?.versao ?? 0) + 1);
+  await fala(p, agente, 'eduardo', r.fala_para_eduardo);
+
+  const novosFeitos = [...feitos, caminho];
+  for (const [i, t] of plano.tarefas.entries()) {
+    if (!t.arquivos.includes(caminho)) continue;
+    const status = t.arquivos.every((a) => novosFeitos.includes(a)) ? 'concluida' : 'em_andamento';
+    await supabase.from('squad_tarefas').update({ status }).eq('projeto_id', p.id).eq('rodada', 1).eq('n', i + 1);
+  }
+  if (novosFeitos.length >= ordem.length) {
+    await fala(p, 'eduardo', 'fernanda', `Os ${ordem.length} arquivos estão prontos. Vou revisar a integração antes de entregar.`);
+    await irParaIntegracao(p);
+    return;
+  }
+  await atualizar(p, { subpasso: 'dev_arquivo', passo_em: null, tentativas: 0, rascunho: { ...p.rascunho, feitos: novosFeitos } });
+}
+
+async function irParaIntegracao(p: Projeto) {
+  await atualizar(p, { etapa: 'integracao', subpasso: 'eduardo_integra', passo_em: null, tentativas: 0, rascunho: { contrato: p.rascunho.contrato, notas: p.rascunho.notas, ordem: p.rascunho.ordem } });
+}
+
+// ---------- integração ----------
+
+async function eduardoIntegra(p: Projeto) {
+  const { plano, doc } = await carregarPlano(p);
+  const cfg = await config();
+  const gerados = await arquivosGerados(p);
+  const automaticos = verificarArquivos(conteudos(gerados), plano, Number(cfg.max_caracteres_arquivo));
+  await estado(p, 'eduardo', 'lendo');
+  const ordem = p.rascunho.ordem as string[];
+  const todos = ordem.map((c) => `--- ${c} ---\n${gerados.get(c)?.conteudo ?? '(não gerado)'}`).join('\n\n');
+  const r = await perguntar<{ fala_para_time: string; pontos: Ponto[] }>(p, EDUARDO,
+    `<arquitetura>\n${doc}\n</arquitetura>\n\nContrato de integração:\n${p.rascunho.contrato}\n\nCódigo do time:\n${todos}\n\nVerificação automática:\n${automaticos.length ? automaticos.map((x) => `- ${x.arquivo}: ${x.problema}`).join('\n') : '- nenhum problema'}\n\nTarefa: revise a integração como Tech Lead. Procure o que quebra o app de verdade: imports e exports que não batem, ids do HTML que o JS procura e não existem, funções chamadas com assinatura diferente, telas que nunca aparecem, erros que travam o fluxo principal, XSS (innerHTML com dado do usuário), consultas ao Supabase que a RLS vai bloquear. Ignore estilo e preferências. Para cada problema: arquivo, problema e correção. Em "fala_para_time", dê o parecer.`,
+    FORMATO_EDUARDO_REVISAO, 'medium', 10000);
+
+  const caminhos = new Set(plano.arquivos.map((a) => a.caminho));
+  const pontos: Ponto[] = [
+    ...automaticos.filter((x) => caminhos.has(x.arquivo)).map((x) => ({ arquivo: x.arquivo, problema: x.problema, correcao: 'Corrigir conforme a verificação automática.' })),
+    ...r.pontos.filter((x) => caminhos.has(x.arquivo)),
+  ];
+  await fala(p, 'eduardo', 'fernanda', r.fala_para_time);
+  const fila = ordem.filter((c) => pontos.some((x) => x.arquivo === c));
+  await supabase.from('squad_artefatos').delete().eq('projeto_id', p.id).eq('tipo', 'revisao_codigo').eq('versao', 1);
+  await supabase.from('squad_artefatos').insert({
+    projeto_id: p.id, tipo: 'revisao_codigo', versao: 1, autor: 'eduardo',
+    conteudo: pontos.length ? pontos.map((x) => `- **${x.arquivo}**: ${x.problema} Correção: ${x.correcao}`).join('\n') : 'Nenhum problema de integração encontrado.',
+  });
+  if (!fila.length) {
+    await irParaDelivery(p, []);
+    return;
+  }
+  const primeiro = donoDo(plano, fila[0]);
+  if (primeiro !== 'eduardo') await fala(p, 'eduardo', primeiro, `${NOME[primeiro]}, começa por ${fila[0]}: ${pontos.find((x) => x.arquivo === fila[0])!.problema.slice(0, 140)}`);
+  await atualizar(p, { subpasso: 'dev_corrige', passo_em: null, tentativas: 0, rascunho: { ...p.rascunho, pontos, fila, corrigidos: [] } });
+}
+
+async function devCorrige(p: Projeto) {
+  const { plano } = await carregarPlano(p);
+  const cfg = await config();
+  const fila = p.rascunho.fila as string[];
+  const corrigidos = (p.rascunho.corrigidos as string[]) ?? [];
+  const pontos = p.rascunho.pontos as Ponto[];
+  const caminho = fila.find((c) => !corrigidos.includes(c));
+  if (!caminho) {
+    await irParaDelivery(p, pontos);
+    return;
+  }
+  const agente = donoDo(plano, caminho);
+  const gerados = await arquivosGerados(p);
+  const atual = gerados.get(caminho);
+  const meus = pontos.filter((x) => x.arquivo === caminho).map((x, i) => `${i + 1}. ${x.problema} Correção: ${x.correcao}`).join('\n');
+  await estado(p, agente, 'digitando');
+  const r = await perguntar<{ conteudo: string; fala_para_eduardo: string }>(p, devPrompt(agente),
+    await pedidoArquivo(p, caminho, `\nVersão atual do seu arquivo:\n--- ${caminho} ---\n${atual?.conteudo ?? '(não gerado)'}\n\nO Eduardo apontou na integração:\n${meus}\n\nTarefa: devolva o arquivo ${caminho} completo e corrigido (até ${cfg.max_caracteres_arquivo} caracteres), mudando só o necessário.`, gerados),
+    FORMATO_ARQUIVO, 'low', 12000);
+  await salvarArquivo(p, caminho, semCercas(r.conteudo), agente, (atual?.versao ?? 0) + 1);
+  await fala(p, agente, 'eduardo', r.fala_para_eduardo);
+  const novos = [...corrigidos, caminho];
+  if (novos.length >= fila.length) {
+    await irParaDelivery(p, pontos);
+    return;
+  }
+  await atualizar(p, { subpasso: 'dev_corrige', passo_em: null, tentativas: 0, rascunho: { ...p.rascunho, corrigidos: novos } });
+}
+
+// Fecha o desenvolvimento: verificação final e entrega para o Lucas.
+async function irParaDelivery(p: Projeto, pontos: Ponto[]) {
+  const { plano } = await carregarPlano(p);
+  const cfg = await config();
+  const finais: Problema[] = verificarArquivos(conteudos(await arquivosGerados(p)), plano, Number(cfg.max_caracteres_arquivo));
+  await supabase.from('squad_tarefas').update({ status: 'concluida' }).eq('projeto_id', p.id).eq('rodada', 1);
+  await fala(p, 'eduardo', 'fernanda', finais.length
+    ? `Integração revisada. ${finais.length === 1 ? 'Ficou 1 alerta automático, que vai documentado' : `Ficaram ${finais.length} alertas automáticos, que vão documentados`} para o QA.`
+    : `Integração revisada${pontos.length ? ` e ${pontos.length} ajustes aplicados` : ''}. Verificação automática limpa.`);
+  await emitir(p, 'handoff', 'eduardo', 'Lucas, o código está pronto e integrado. Pode preparar a entrega.', { para: 'lucas', dados: { artefato: 'o código' } });
+  await emitir(p, 'fase', null, 'Sala 5 · Delivery prepara a entrega', { sala: 'delivery' });
+  await atualizar(p, {
+    etapa: 'delivery', subpasso: 'lucas_documenta', passo_em: null, tentativas: 0,
+    rascunho: { pontos_integracao: pontos, verificacao_final: finais },
+  });
+}
+
+export const PASSOS_DESENVOLVIMENTO = {
+  planejamento: { eduardo_planeja: eduardoPlaneja },
+  desenvolvimento: { dev_arquivo: devArquivo },
+  integracao: { eduardo_integra: eduardoIntegra, dev_corrige: devCorrige },
+};

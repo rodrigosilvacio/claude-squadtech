@@ -4,18 +4,24 @@
 // invocação (~150s) e vira eventos em squad_eventos.
 // Deploy com verify_jwt desligado (a autenticação é o segredo interno).
 //
-// Salas: produto (sala-produto.ts) e arquitetura (sala-arquitetura.ts).
+// Salas: produto, arquitetura, desenvolvimento e delivery (sala-*.ts).
 import { atualizar, CAMPOS_PROJETO, config, emitir, estado, type Projeto, supabase } from './nucleo.ts';
 import { PASSOS_ARQUITETURA } from './sala-arquitetura.ts';
+import { PASSOS_DELIVERY } from './sala-delivery.ts';
+import { PASSOS_DESENVOLVIMENTO } from './sala-desenvolvimento.ts';
 import { PASSOS_PRODUTO } from './sala-produto.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
-const PASSOS: Record<string, Record<string, (p: Projeto) => Promise<void>>> = { ...PASSOS_PRODUTO, ...PASSOS_ARQUITETURA };
+const PASSOS: Record<string, Record<string, (p: Projeto) => Promise<void>>> = {
+  ...PASSOS_PRODUTO, ...PASSOS_ARQUITETURA, ...PASSOS_DESENVOLVIMENTO, ...PASSOS_DELIVERY,
+};
 const PRIMEIRO: Record<string, string> = {
   entrevista: 'ana_analisa', prd: 'bruno_escreve', arquitetura: 'carla_propoe', migracao: 'diego_aplica',
+  planejamento: 'eduardo_planeja', desenvolvimento: 'dev_arquivo', integracao: 'eduardo_integra', delivery: 'lucas_documenta',
 };
 const ETAPAS_AUTOMATICAS = Object.keys(PASSOS);
+const AGENTES = ['ana', 'bruno', 'carla', 'diego', 'eduardo', 'fernanda', 'gabriel', 'helena', 'igor', 'julia', 'lucas'];
 
 function iguais(a: string, b: string): boolean {
   if (!a || a.length !== b.length) return false;
@@ -48,7 +54,8 @@ async function executar(id: string) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`passo ${p.etapa}/${subpasso} do projeto ${p.id} falhou:`, msg);
     await atualizar(p, { erro: msg.slice(0, 500), passo_em: null });
-    const agente = subpasso.split('_')[0]; // ana_analisa → ana
+    const prefixo = subpasso.split('_')[0]; // ana_analisa → ana; dev_* → Eduardo, que coordena os devs
+    const agente = AGENTES.includes(prefixo) ? prefixo : 'eduardo';
     await estado(p, agente, 'erro');
     await emitir(p, 'sistema', null, `A esteira parou: ${msg.slice(0, 200).replace(/\.+$/, '')}. Use "Retomar" para tentar de novo.`, { dados: { erro: true } });
   }

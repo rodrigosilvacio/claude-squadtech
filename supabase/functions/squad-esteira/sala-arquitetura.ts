@@ -27,7 +27,7 @@ export function prefixoDo(p: Projeto): string {
   return p.prefixo_db ?? `sq_${p.slug.replace(/-/g, '_').slice(0, 14).replace(/_+$/, '')}_${p.id.slice(0, 4)}_`;
 }
 
-async function regras(p: Projeto): Promise<string> {
+export async function regras(p: Projeto): Promise<string> {
   const cfg = await config();
   return REGRAS_TECNICAS.replaceAll('{prefixo}', prefixoDo(p))
     .replaceAll('{max_arquivos}', cfg.max_arquivos).replaceAll('{max_chars}', cfg.max_caracteres_arquivo);

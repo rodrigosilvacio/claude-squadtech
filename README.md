@@ -23,8 +23,8 @@ Escritório em pixel art onde 11 agentes de IA levam um briefing até uma **apli
 | 0 · Fundação | Escritório visual, tabelas `squad_*`, login, demonstração encenada | ✅ |
 | 1 · Produto | Sala 1 real (Ana e Bruno na Claude API) + Portão 1 | ✅ |
 | 2 · Arquitetura | Sala 2 real (Carla e Diego) + Portão 2 + executor seguro de SQL | ✅ |
-| 3 · Dev + Delivery | Commit em `projetos/` | Próxima |
-| 4 · Testes + Dados | QA no navegador + migrações | |
+| 3 · Dev + Delivery | Devs geram o código, Eduardo integra, Lucas documenta e faz o commit em `projetos/` | ✅ |
+| 4 · Testes | QA no navegador (Igor e Júlia) com loop de correção | Próxima |
 
 ## Estrutura
 
@@ -49,6 +49,10 @@ supabase/functions/
     nucleo.ts           banco, eventos e chamada ao Claude
     sala-produto.ts     Ana e Bruno
     sala-arquitetura.ts Carla e Diego, validação do plano e migração
+    sala-desenvolvimento.ts Eduardo, Fernanda, Gabriel e Helena
+    sala-delivery.ts    Lucas: docs, config.js, portfólio e commit
+    verificacoes.ts     checagem automática do código gerado
+    github.ts           commit atômico via Git Data API
     sql.ts              validador do SQL gerado (1ª barreira)
     prompts.ts          personas, regras técnicas e formatos JSON
 projetos/             apps entregues pelo squad (um por pasta)
@@ -71,7 +75,22 @@ python3 -m http.server 8000
 
 Sala 1 (Produto): `ana_analisa → bruno_critica → ana_pergunta → [suas respostas] → bruno_escreve → ana_revisa → bruno_ajusta → [Portão 1]`.
 
-Sala 2 (Arquitetura): `carla_propoe → diego_revisa → carla_ajusta → [Portão 2] → diego_aplica (migração)`.
+Sala 2 (Arquitetura): `carla_propoe → carla_sql → diego_revisa → carla_ajusta → [Portão 2] → diego_aplica (migração)`.
+
+Sala 3 (Desenvolvimento): `eduardo_planeja (contrato de integração) → dev_arquivo (um arquivo por invocação) → eduardo_integra → dev_corrige`.
+
+Sala 5 (Delivery): `lucas_documenta (README, PRD, arquitetura, relatório, config.js) → lucas_publica (commit em projetos/<slug>/ + projetos/index.html)`.
+
+## Configuração da entrega no GitHub
+
+O Lucas faz o commit com um token guardado como secret nas Edge Functions do Supabase:
+
+1. GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token.
+2. Repository access: **Only select repositories** → `claude-squadtech`.
+3. Permissions → Repository permissions → **Contents: Read and write** (o resto fica sem acesso).
+4. Supabase → projeto ClaudeProjects → Edge Functions → **Secrets** → nome `GITHUB_TOKEN_SQUAD`, valor = o token.
+
+Sem o secret, a esteira para no passo de publicação com uma mensagem clara; depois de configurar, é só clicar em **Retomar**.
 
 ## SQL gerado pelos agentes
 

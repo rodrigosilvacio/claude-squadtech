@@ -55,7 +55,11 @@ const STATUS_ETAPA = {
   arquitetura: 'Sala 2 · Carla e Diego desenhando a solução',
   aguardando_aprovacao_arquitetura: 'Aguardando sua aprovação da arquitetura',
   migracao: 'Sala 2 · Diego aplicando a migração no banco',
-  planejamento: 'Arquitetura aprovada · a Sala de Desenvolvimento chega na Fase 3',
+  planejamento: 'Sala 3 · Eduardo distribuindo as tarefas',
+  desenvolvimento: 'Sala 3 · Devs escrevendo o código',
+  integracao: 'Sala 3 · Eduardo revisando a integração',
+  delivery: 'Sala 5 · Lucas preparando a entrega',
+  concluido: 'Entregue',
   escalado: 'Encerrado pela Ana',
 };
 
@@ -306,6 +310,7 @@ export class UI {
       el('ul', { class: 'links' }, (d.links ?? []).map((l) => el('li', {},
         l.url ? el('a', { href: l.url, target: '_blank', rel: 'noopener' }, l.rotulo) : el('span', { class: 'desabilitado', text: l.rotulo }),
         l.nota ? el('small', { text: l.nota }) : null))),
+      d.zip ? el('button', { type: 'button', class: 'botao', onclick: () => this.aoBaixarZip?.() }, 'Baixar zip da pasta') : null,
       d.arquivos ? el('pre', { class: 'arvore', text: d.arquivos }) : null);
     dlg.showModal();
   }
@@ -340,6 +345,10 @@ export class UI {
     }
     $('#projetoTokens').textContent = p.tokens_entrada != null
       ? `${Math.round((p.tokens_entrada + p.tokens_saida) / 1000)} mil tokens` : '';
+    $('#projetoLinks').replaceChildren(...(p.url_app ? [
+      el('a', { href: p.url_app, target: '_blank', rel: 'noopener' }, 'Abrir app'),
+      el('button', { type: 'button', class: 'link', onclick: () => this.aoBaixarZip?.() }, 'Baixar zip'),
+    ] : []));
   }
 
   iniciarProjeto(nome, modo) {
@@ -363,6 +372,7 @@ export class UI {
     $('#projetoBarra').hidden = true;
     $('#projetoErro').hidden = true;
     $('#projetoTokens').textContent = '';
+    $('#projetoLinks').replaceChildren();
   }
 
   // ---------- projetos (nuvem) ----------

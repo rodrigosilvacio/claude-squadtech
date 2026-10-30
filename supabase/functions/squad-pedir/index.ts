@@ -5,6 +5,8 @@
 //  - { acao: "decidir", id, portao: "prd" | "arquitetura", aprovado, comentario? }
 //  - { acao: "retomar", id }                       reabre um passo que parou
 //  - { acao: "testes", id, rodada, testes | pulado } resultado dos testes que o navegador rodou
+//  - { acao: "evoluir", id, pedido }               novo ciclo num app já entregue
+//  - { acao: "apagar", id, confirmar: slug }       remove tabelas, pasta no GitHub e o projeto
 // Toda escrita usa a service role; o navegador só lê (RLS).
 import { createClient } from 'npm:@supabase/supabase-js@2.110.5';
 
@@ -16,7 +18,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const ETAPAS_AUTOMATICAS = ['entrevista', 'prd', 'arquitetura', 'migracao', 'planejamento', 'desenvolvimento', 'integracao', 'testes', 'delivery'];
+const ETAPAS_AUTOMATICAS = ['entrevista', 'prd', 'arquitetura', 'migracao', 'planejamento', 'desenvolvimento', 'integracao', 'testes', 'delivery', 'apagando'];
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -206,6 +208,42 @@ async function testes(userId: string, corpo: Record<string, unknown>) {
   return json({ ok: true });
 }
 
+// Evolução de um app entregue: abre o ciclo seguinte direto no PRD (o Bruno
+// incorpora o pedido e o fluxo segue com os dois portões, como na primeira vez).
+async function evoluir(userId: string, corpo: Record<string, unknown>) {
+  const p = await projetoDoUsuario(userId, corpo.id);
+  if (p.etapa !== 'concluido') throw new Recusa('Só dá para pedir ajuste num projeto já entregue.', 409);
+  const pedido = String(corpo.pedido ?? '').trim();
+  if (pedido.length < 15) throw new Recusa('Descreva o ajuste com um pouco mais de detalhe (pelo menos 15 caracteres).');
+  if (pedido.length > 3000) throw new Recusa('O pedido passou de 3000 caracteres.');
+  const ciclo = (p.ciclo ?? 1) + 1;
+  const { error } = await servico.from('squad_artefatos').insert({ projeto_id: p.id, tipo: 'briefing', caminho: `ajuste-${ciclo}`, versao: ciclo, conteudo: pedido });
+  if (error) throw error;
+  await evento(p.id, 'sistema', { texto: `Você pediu um ajuste (versão ${ciclo} do app)` });
+  await evento(p.id, 'artefato', { dados: { tipo: 'briefing', titulo: `Pedido de ajuste (versão ${ciclo})`, conteudo: `# Pedido de ajuste · versão ${ciclo}\n\n${pedido}` } });
+  await evento(p.id, 'fase', { texto: `Sala 1 · Produto recebe o pedido de ajuste (versão ${ciclo})` });
+  const { error: e2 } = await servico.from('squad_projetos').update({
+    ciclo, etapa: 'prd', subpasso: 'bruno_escreve', passo_em: null, tentativas: 0, erro: null, rodada_qa: 0,
+    rascunho: { premissas: [], comentario: pedido, ajuste: true },
+  }).eq('id', p.id);
+  if (e2) throw e2;
+  return json({ ok: true });
+}
+
+// Remoção definitiva. Exige o identificador do projeto digitado e nenhum passo rodando.
+async function apagar(userId: string, corpo: Record<string, unknown>) {
+  const p = await projetoDoUsuario(userId, corpo.id);
+  if (String(corpo.confirmar ?? '') !== p.slug) throw new Recusa(`Para confirmar, digite exatamente "${p.slug}".`);
+  if (p.etapa === 'apagando' && !p.erro) throw new Recusa('Este projeto já está sendo apagado.', 409);
+  const rodando = p.passo_em && Date.now() - new Date(p.passo_em).getTime() < 4 * 60_000;
+  if (rodando) throw new Recusa('O squad está no meio de um passo deste projeto. Tente de novo em alguns minutos.', 409);
+  await evento(p.id, 'sistema', { sala: 'delivery', texto: 'Você pediu para apagar o projeto. O Lucas está removendo o app, o banco e a pasta no GitHub.' });
+  // Mudar a etapa dispara a esteira (lucas_remove).
+  const { error } = await servico.from('squad_projetos').update({ etapa: 'apagando', subpasso: 'lucas_remove', erro: null, passo_em: null, tentativas: 0 }).eq('id', p.id);
+  if (error) throw error;
+  return json({ ok: true });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ erro: 'use POST' }, 405);
@@ -229,6 +267,8 @@ Deno.serve(async (req) => {
       case 'decidir': return await decidir(auth.user.id, corpo);
       case 'retomar': return await retomar(auth.user.id, corpo);
       case 'testes': return await testes(auth.user.id, corpo);
+      case 'evoluir': return await evoluir(auth.user.id, corpo);
+      case 'apagar': return await apagar(auth.user.id, corpo);
       default: return json({ erro: 'ação desconhecida' }, 400);
     }
   } catch (e) {

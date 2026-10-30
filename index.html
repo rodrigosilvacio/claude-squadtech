@@ -129,6 +129,34 @@
     <footer class="rodape"><p id="resumoTestes" class="meta"></p></footer>
   </dialog>
 
+  <dialog id="dlgAjuste" class="dialogo" aria-labelledby="tituloAjuste">
+    <header><div><h2 id="tituloAjuste">Pedir ajuste no app</h2><p class="meta">Abre uma nova versão: Produto, Arquitetura, Dev, Testes e Delivery</p></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
+    <form id="formAjuste" class="conteudo formulario">
+      <label for="textoAjuste" class="rotulo">O que você quer mudar ou acrescentar?</label>
+      <textarea id="textoAjuste" rows="6" maxlength="3000" required placeholder="Ex.: adicionar um filtro por data na lista de sessões e mostrar o total de presentes no topo."></textarea>
+      <p class="meta">O Bruno atualiza o PRD e a Carla a arquitetura (você aprova os dois de novo). Os devs mexem só no que muda, o QA testa e o Lucas republica no mesmo endereço.</p>
+      <p class="erro" id="erroAjuste" role="alert"></p>
+      <button type="submit" class="botao primario">Enviar ao squad</button>
+    </form>
+  </dialog>
+
+  <dialog id="dlgApagar" class="dialogo" aria-labelledby="tituloApagar">
+    <header><div><h2 id="tituloApagar">Apagar projeto</h2><p class="meta">Não dá para desfazer</p></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
+    <form id="formApagar" class="conteudo formulario">
+      <p>O Lucas vai remover:</p>
+      <ul class="lista-apagar">
+        <li>as tabelas do app no Supabase, com todos os dados (inclusive os de teste);</li>
+        <li>a pasta do app no GitHub e o app publicado no GitHub Pages;</li>
+        <li>o projeto no SquadTech: conversa, PRD, arquitetura, código e testes.</li>
+      </ul>
+      <p class="meta">Se quiser guardar o código, use "Baixar zip" antes.</p>
+      <label for="confirmaApagar" class="rotulo">Para confirmar, digite <strong id="slugApagar"></strong></label>
+      <input id="confirmaApagar" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+      <p class="erro" id="erroApagar" role="alert"></p>
+      <button type="submit" class="botao perigo">Apagar definitivamente</button>
+    </form>
+  </dialog>
+
   <dialog id="dlgLogin" class="dialogo estreito" aria-labelledby="tituloLogin">
     <header><div><h2 id="tituloLogin">Entrar no SquadTech</h2><p class="meta">Use sua conta do Supabase</p></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
     <form id="formLogin" class="conteudo formulario">

@@ -302,3 +302,8 @@ textarea:disabled { opacity: 0.4; }
 .previa-fundo { position: fixed; left: -12000px; top: 0; width: 1024px; height: 768px; border: 0; pointer-events: none; }
 .aviso-testes { position: fixed; right: 16px; bottom: 16px; z-index: 40; max-width: min(380px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 10px; background: #2a2440; border: 1px solid #6c5ce7; color: #eceaf6; font-size: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
 .aviso-testes[hidden] { display: none; }
+
+.botao.perigo { background: #b3261e; border-color: #b3261e; color: #fff; }
+.botao.perigo:hover { background: #8f1d17; }
+.lista-apagar { margin: 0 0 4px; padding-left: 20px; display: grid; gap: 4px; }
+.link.perigo { color: #ff8a80; }

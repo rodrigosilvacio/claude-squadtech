@@ -13,10 +13,13 @@ const MAX_PERGUNTAS = 5;
 // Os ajustes vêm depois da entrevista e prevalecem sobre ela.
 export async function contexto(p: Projeto): Promise<string> {
   const { data, error } = await supabase.from('squad_artefatos')
-    .select('tipo, versao, conteudo, comentario').eq('projeto_id', p.id).in('tipo', ['respostas', 'prd']).order('versao');
+    .select('tipo, versao, caminho, conteudo, comentario').eq('projeto_id', p.id).in('tipo', ['respostas', 'prd', 'briefing']).order('versao');
   if (error) throw error;
   const rodadas = data.filter((a) => a.tipo === 'respostas').map((a) => `Rodada ${a.versao}:\n${a.conteudo}`).join('\n\n');
-  const ajustes = data.filter((a) => a.tipo === 'prd' && a.comentario).map((a) => `- Sobre o PRD v${a.versao}: ${a.comentario}`).join('\n');
+  const ajustes = [
+    ...data.filter((a) => a.tipo === 'prd' && a.comentario).map((a) => `- Sobre o PRD v${a.versao}: ${a.comentario}`),
+    ...data.filter((a) => a.tipo === 'briefing' && a.caminho?.startsWith('ajuste-')).map((a) => `- Evolução pedida depois da entrega (ciclo ${a.versao}): ${a.conteudo}`),
+  ].join('\n');
   return `<briefing>\nNome do projeto: ${p.nome}\n\n${p.briefing}\n</briefing>\n\n<entrevista>\n${rodadas || 'Ainda não houve perguntas ao cliente.'}${ajustes ? `\n\nAjustes que o cliente pediu depois, ao revisar o PRD. São as decisões mais recentes e prevalecem sobre as respostas acima:\n${ajustes}` : ''}\n</entrevista>`;
 }
 
@@ -90,7 +93,9 @@ async function brunoEscreve(p: Projeto) {
   const versao = (anterior?.versao ?? 0) + 1;
   await estado(p, 'bruno', 'digitando');
   let pedido = `${await contexto(p)}\n\nPremissas do squad:\n${listar(premissas)}\n\nData de hoje: ${new Date().toLocaleDateString('pt-BR')}.\n\n`;
-  if (anterior && comentario) {
+  if (anterior && comentario && p.rascunho.ajuste) {
+    pedido += `<prd>\n${anterior.conteudo}\n</prd>\n\nO app do PRD v${anterior.versao} já foi entregue e está em uso. O cliente pediu uma evolução (ciclo ${p.ciclo}):\n"${comentario}"\n\nTarefa: escreva o PRD v${versao} incorporando a evolução. Mantenha o que já existe, atualize requisitos e critérios de aceite afetados e acrescente uma seção "Mudanças nesta versão" logo depois do resumo executivo. Se o pedido estiver fora do escopo da stack, registre a adaptação. Em "fala_para_ana", diga o que mudou.`;
+  } else if (anterior && comentario) {
     pedido += `<prd>\n${anterior.conteudo}\n</prd>\n\nO cliente pediu ajustes no PRD v${anterior.versao}:\n"${comentario}"\n\nTarefa: escreva o PRD v${versao} aplicando o ajuste. Mude só o necessário e mantenha o resto. Em "fala_para_ana", diga o que mudou.`;
   } else {
     pedido += `Tarefa: escreva o PRD v${versao} completo. Em "fala_para_ana", peça a revisão dela destacando a decisão de escopo mais importante.`;

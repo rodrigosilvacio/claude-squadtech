@@ -17,12 +17,13 @@ export interface Projeto {
   prefixo_db: string | null;
   rascunho: Record<string, unknown>;
   rodada_qa: number;
+  ciclo: number;
   tokens_entrada: number;
   tokens_saida: number;
   tokens_cache: number;
 }
 
-export const CAMPOS_PROJETO = 'id, nome, slug, briefing, etapa, subpasso, rodada_po, rodada_arq, rodada_qa, prefixo_db, rascunho, tokens_entrada, tokens_saida, tokens_cache';
+export const CAMPOS_PROJETO = 'id, nome, slug, briefing, etapa, subpasso, rodada_po, rodada_arq, rodada_qa, ciclo, prefixo_db, rascunho, tokens_entrada, tokens_saida, tokens_cache';
 
 const SALA_DO_AGENTE: Record<string, string> = {
   ana: 'produto', bruno: 'produto',
@@ -117,6 +118,14 @@ export async function perguntar<T>(p: Projeto, system: Sistema, conteudo: Conteu
 // Saída em texto livre (código): sem o escape do JSON, cabe mais arquivo no mesmo limite.
 export function perguntarTexto(p: Projeto, system: Sistema, conteudo: Conteudo, effort: 'low' | 'medium', maxTokens: number) {
   return chamar(p, system, conteudo, effort, maxTokens);
+}
+
+// Pedido de evolução do ciclo atual (ciclo > 1), guardado como briefing "ajuste-<ciclo>".
+export async function pedidoDeAjuste(p: Projeto): Promise<string | null> {
+  if (p.ciclo <= 1) return null;
+  const { data } = await supabase.from('squad_artefatos').select('conteudo').eq('projeto_id', p.id)
+    .eq('tipo', 'briefing').eq('caminho', `ajuste-${p.ciclo}`).maybeSingle();
+  return data?.conteudo ?? null;
 }
 
 // Último artefato de um tipo (opcionalmente só os aprovados).

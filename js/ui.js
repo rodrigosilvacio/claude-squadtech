@@ -59,6 +59,7 @@ const STATUS_ETAPA = {
   desenvolvimento: 'Sala 3 · Devs escrevendo o código',
   integracao: 'Sala 3 · Eduardo revisando a integração',
   testes: 'Sala 4 · Júlia e Igor testando o app',
+  apagando: 'Lucas apagando o projeto',
   delivery: 'Sala 5 · Lucas preparando a entrega',
   concluido: 'Entregue',
   escalado: 'Encerrado pela Ana',
@@ -347,10 +348,15 @@ export class UI {
     }
     $('#projetoTokens').textContent = p.tokens_entrada != null
       ? `${Math.round((p.tokens_entrada + p.tokens_saida) / 1000)} mil tokens${p.tokens_cache ? ` + ${Math.round(p.tokens_cache / 1000)} mil do cache` : ''}` : '';
-    $('#projetoLinks').replaceChildren(...(p.url_app ? [
-      el('a', { href: p.url_app, target: '_blank', rel: 'noopener' }, 'Abrir app'),
-      el('button', { type: 'button', class: 'link', onclick: () => this.aoBaixarZip?.() }, 'Baixar zip'),
-    ] : []));
+    const versao = p.ciclo > 1 ? ` · versão ${p.ciclo}` : '';
+    $('#projetoLinks').replaceChildren(...[
+      ...(p.url_app ? [
+        el('a', { href: p.url_app, target: '_blank', rel: 'noopener' }, `Abrir app${versao}`),
+        el('button', { type: 'button', class: 'link', onclick: () => this.aoBaixarZip?.() }, 'Baixar zip'),
+      ] : []),
+      p.etapa === 'concluido' ? el('button', { type: 'button', class: 'link', onclick: () => this.aoPedirAjuste?.() }, 'Pedir ajuste') : null,
+      p.etapa !== 'apagando' ? el('button', { type: 'button', class: 'link perigo', onclick: () => this.aoApagar?.(p) }, 'Apagar projeto') : null,
+    ].filter(Boolean));
   }
 
   iniciarProjeto(nome, modo) {

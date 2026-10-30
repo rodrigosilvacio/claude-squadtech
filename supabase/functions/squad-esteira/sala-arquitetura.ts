@@ -263,7 +263,6 @@ async function diegoAplica(p: Projeto) {
   await fala(p, 'diego', 'carla', plano.sql ? 'Migração aplicada e conferida. Pode levar para o Desenvolvimento.' : 'Nada para aplicar no banco. Pode levar para o Desenvolvimento.');
   await emitir(p, 'handoff', 'carla', `Eduardo, arquitetura aprovada: ${plano.tarefas.length} tarefas e os contratos entre os módulos estão no documento.`, { para: 'eduardo', dados: { artefato: 'a arquitetura' } });
   await emitir(p, 'fase', null, 'Sala 3 · Desenvolvimento recebe a arquitetura', { sala: 'desenvolvimento' });
-  await emitir(p, 'sistema', null, 'A Sala de Desenvolvimento entra em operação na Fase 3. O projeto fica salvo com a arquitetura aprovada.', { sala: 'desenvolvimento' });
   await atualizar(p, { etapa: 'planejamento', subpasso: null, passo_em: null, tentativas: 0, rascunho: {} });
 }
 

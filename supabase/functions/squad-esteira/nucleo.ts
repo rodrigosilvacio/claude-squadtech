@@ -16,11 +16,13 @@ export interface Projeto {
   rodada_arq: number;
   prefixo_db: string | null;
   rascunho: Record<string, unknown>;
+  rodada_qa: number;
   tokens_entrada: number;
   tokens_saida: number;
+  tokens_cache: number;
 }
 
-export const CAMPOS_PROJETO = 'id, nome, slug, briefing, etapa, subpasso, rodada_po, rodada_arq, prefixo_db, rascunho, tokens_entrada, tokens_saida';
+export const CAMPOS_PROJETO = 'id, nome, slug, briefing, etapa, subpasso, rodada_po, rodada_arq, rodada_qa, prefixo_db, rascunho, tokens_entrada, tokens_saida, tokens_cache';
 
 const SALA_DO_AGENTE: Record<string, string> = {
   ana: 'produto', bruno: 'produto',
@@ -57,9 +59,29 @@ export async function atualizar(p: Projeto, campos: Record<string, unknown>) {
 
 export const listar = (itens: string[]) => (itens.length ? itens.map((i) => `- ${i}`).join('\n') : '- nenhuma');
 
+// System: texto simples, ou o contexto do projeto (PRD, arquitetura, regras e
+// contrato, igual para todos os agentes) seguido da persona. O contexto vai com
+// cache_control: as chamadas seguintes do mesmo projeto leem do cache (~5% do preço).
+export type Sistema = string | { contexto: string; persona: string };
+// Conteúdo: texto, ou blocos em que `cache` marca o fim de um prefixo estável
+// (ex.: o código dos colegas, que só cresce de um arquivo para o outro).
+export type Conteudo = string | { texto: string; cache?: boolean }[];
+
+const CACHE = { type: 'ephemeral' } as const;
+
+function montarSystem(s: Sistema) {
+  if (typeof s === 'string') return s;
+  return [{ type: 'text', text: s.contexto, cache_control: CACHE }, { type: 'text', text: s.persona }];
+}
+
+function montarConteudo(c: Conteudo) {
+  if (typeof c === 'string') return c;
+  return c.filter((b) => b.texto).map((b) => (b.cache ? { type: 'text', text: b.texto, cache_control: CACHE } : { type: 'text', text: b.texto }));
+}
+
 // Chamada ao Claude. `fallbacks: "default"` reenvia no servidor um pedido recusado
 // pelos classificadores para o modelo recomendado. Com `formato`, a saída vem em JSON Schema.
-async function chamar(p: Projeto, system: string, conteudo: string, effort: 'low' | 'medium', maxTokens: number, formato?: object) {
+async function chamar(p: Projeto, system: Sistema, conteudo: Conteudo, effort: 'low' | 'medium', maxTokens: number, formato?: object) {
   const cfg = await config();
   if (p.tokens_entrada + p.tokens_saida > Number(cfg.teto_tokens_projeto)) {
     throw new Error('O projeto atingiu o teto de tokens configurado em squad_config.');
@@ -67,30 +89,33 @@ async function chamar(p: Projeto, system: string, conteudo: string, effort: 'low
   const resposta = await anthropic.beta.messages.create({
     model: cfg.modelo,
     max_tokens: maxTokens,
-    system,
-    messages: [{ role: 'user', content: conteudo }],
+    system: montarSystem(system),
+    messages: [{ role: 'user', content: montarConteudo(conteudo) }],
     output_config: formato ? { effort, format: { type: 'json_schema', schema: formato } } : { effort },
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     // deno-lint-ignore no-explicit-any
   } as any);
-  p.tokens_entrada += resposta.usage?.input_tokens ?? 0;
-  p.tokens_saida += resposta.usage?.output_tokens ?? 0;
-  await atualizar(p, { tokens_entrada: p.tokens_entrada, tokens_saida: p.tokens_saida });
+  // Entrada = o que pagou preço cheio ou de escrita no cache; leituras do cache contam à parte.
+  const u = resposta.usage ?? {};
+  p.tokens_entrada += (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+  p.tokens_saida += u.output_tokens ?? 0;
+  p.tokens_cache += u.cache_read_input_tokens ?? 0;
+  await atualizar(p, { tokens_entrada: p.tokens_entrada, tokens_saida: p.tokens_saida, tokens_cache: p.tokens_cache });
   if (resposta.stop_reason === 'refusal') throw new Error('O modelo recusou este pedido. Revise o briefing e tente de novo.');
   // deno-lint-ignore no-explicit-any
   const texto = resposta.content.map((b: any) => (b.type === 'text' ? b.text : '')).join('');
   return { texto, cortada: resposta.stop_reason === 'max_tokens' };
 }
 
-export async function perguntar<T>(p: Projeto, system: string, conteudo: string, formato: object, effort: 'low' | 'medium', maxTokens: number): Promise<T> {
+export async function perguntar<T>(p: Projeto, system: Sistema, conteudo: Conteudo, formato: object, effort: 'low' | 'medium', maxTokens: number): Promise<T> {
   const r = await chamar(p, system, conteudo, effort, maxTokens, formato);
   if (r.cortada) throw new Error('A resposta do modelo veio cortada (limite de tokens).');
   return JSON.parse(r.texto) as T;
 }
 
 // Saída em texto livre (código): sem o escape do JSON, cabe mais arquivo no mesmo limite.
-export function perguntarTexto(p: Projeto, system: string, conteudo: string, effort: 'low' | 'medium', maxTokens: number) {
+export function perguntarTexto(p: Projeto, system: Sistema, conteudo: Conteudo, effort: 'low' | 'medium', maxTokens: number) {
   return chamar(p, system, conteudo, effort, maxTokens);
 }
 

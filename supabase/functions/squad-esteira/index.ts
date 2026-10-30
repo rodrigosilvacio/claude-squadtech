@@ -4,21 +4,23 @@
 // invocação (~150s) e vira eventos em squad_eventos.
 // Deploy com verify_jwt desligado (a autenticação é o segredo interno).
 //
-// Salas: produto, arquitetura, desenvolvimento e delivery (sala-*.ts).
+// Salas: produto, arquitetura, desenvolvimento, testes e delivery (sala-*.ts).
+// testes/navegador não é passo da esteira: espera o navegador do cliente (o trigger não dispara).
 import { atualizar, CAMPOS_PROJETO, config, emitir, estado, type Projeto, supabase } from './nucleo.ts';
 import { PASSOS_ARQUITETURA } from './sala-arquitetura.ts';
 import { PASSOS_DELIVERY } from './sala-delivery.ts';
 import { PASSOS_DESENVOLVIMENTO } from './sala-desenvolvimento.ts';
 import { PASSOS_PRODUTO } from './sala-produto.ts';
+import { PASSOS_TESTES } from './sala-testes.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
 const PASSOS: Record<string, Record<string, (p: Projeto) => Promise<void>>> = {
-  ...PASSOS_PRODUTO, ...PASSOS_ARQUITETURA, ...PASSOS_DESENVOLVIMENTO, ...PASSOS_DELIVERY,
+  ...PASSOS_PRODUTO, ...PASSOS_ARQUITETURA, ...PASSOS_DESENVOLVIMENTO, ...PASSOS_TESTES, ...PASSOS_DELIVERY,
 };
 const PRIMEIRO: Record<string, string> = {
   entrevista: 'ana_analisa', prd: 'bruno_escreve', arquitetura: 'carla_propoe', migracao: 'diego_aplica',
-  planejamento: 'eduardo_planeja', desenvolvimento: 'dev_arquivo', integracao: 'eduardo_integra', delivery: 'lucas_documenta',
+  planejamento: 'eduardo_planeja', desenvolvimento: 'dev_arquivo', integracao: 'eduardo_integra', testes: 'julia_revisa', delivery: 'lucas_documenta',
 };
 const ETAPAS_AUTOMATICAS = Object.keys(PASSOS);
 const AGENTES = ['ana', 'bruno', 'carla', 'diego', 'eduardo', 'fernanda', 'gabriel', 'helena', 'igor', 'julia', 'lucas'];
@@ -46,6 +48,10 @@ async function executar(id: string) {
   if (!data) return;
   const p = data as Projeto;
   const subpasso = p.subpasso ?? PRIMEIRO[p.etapa];
+  if (subpasso === 'navegador') {
+    await atualizar(p, { passo_em: null }); // espera o navegador do cliente; nada a fazer aqui
+    return;
+  }
   const passo = PASSOS[p.etapa]?.[subpasso];
   try {
     if (!passo) throw new Error(`Passo desconhecido: ${p.etapa}/${subpasso}`);

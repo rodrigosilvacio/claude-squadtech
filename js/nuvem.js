@@ -26,6 +26,17 @@ export const nuvem = {
     if (error) throw new Error(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message);
   },
 
+  // Sessão crua como o supabase-js guarda (para a Sala de Testes rodar o app logado).
+  // Renova antes se faltar menos de 15 min, para o app não precisar renovar no meio dos testes.
+  async sessaoBruta() {
+    if (!cliente) return null;
+    const { data } = await cliente.auth.getSession();
+    if (!data.session) return null;
+    if (data.session.expires_at * 1000 - Date.now() < 15 * 60_000) await cliente.auth.refreshSession();
+    const chave = `sb-${new URL(SUPABASE_URL).hostname.split('.')[0]}-auth-token`;
+    return localStorage.getItem(chave);
+  },
+
   async sair() {
     await cliente?.auth.signOut();
   },
@@ -62,7 +73,7 @@ export const nuvem = {
 
   async projeto(id) {
     const { data, error } = await cliente.from('squad_projetos')
-      .select('id, nome, slug, etapa, subpasso, erro, rodada_po, tokens_entrada, tokens_saida, url_app, url_repo, criado_em')
+      .select('id, nome, slug, etapa, subpasso, erro, rodada_po, rodada_qa, prefixo_db, tokens_entrada, tokens_saida, tokens_cache, url_app, url_repo, criado_em')
       .eq('id', id).single();
     if (error) throw error;
     return data;
@@ -79,6 +90,13 @@ export const nuvem = {
       if (data.length < 500) return todos;
       desdeId = data[data.length - 1].id;
     }
+  },
+
+  // Testes do Igor que esperam o navegador.
+  async testesPendentes(id) {
+    const { data, error } = await cliente.from('squad_projetos').select('rascunho, rodada_qa, prefixo_db').eq('id', id).single();
+    if (error) throw error;
+    return { testes: data.rascunho?.testes ?? [], rodada: data.rodada_qa, prefixo: data.prefixo_db };
   },
 
   // Última versão de cada arquivo da entrega (código e docs), para montar o zip.

@@ -49,6 +49,11 @@
         <span class="links-projeto" id="projetoLinks"></span>
       </div>
       <div class="faixa-erro" id="projetoErro" role="alert" hidden></div>
+      <div class="faixa-testes" id="projetoTestes" role="status" hidden>
+        <span>Sala 4 · O Igor preparou os testes. Eles rodam aqui no seu navegador.</span>
+        <button type="button" class="botao" id="btnRodarTestes">Rodar testes</button>
+        <button type="button" class="link" id="btnPularTestes">Pular testes</button>
+      </div>
       <div class="moldura">
         <canvas id="escritorio" role="img" aria-label="Escritório em pixel art com 5 salas: Produto, Arquitetura, Desenvolvimento, Testes e Delivery, e 11 agentes trabalhando"></canvas>
         <div class="tooltip" id="tooltip" hidden></div>
@@ -109,6 +114,15 @@
   <dialog id="dlgEntrega" class="dialogo" aria-labelledby="tituloEntrega">
     <header><div><h2 id="tituloEntrega">Solução entregue</h2><p class="meta">Sala 5 · Delivery</p></div><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
     <div class="conteudo"></div>
+  </dialog>
+
+  <dialog id="dlgTestes" class="dialogo largo" aria-labelledby="tituloTestes">
+    <header><div><h2 id="tituloTestes">Sala de Testes</h2><p class="meta" id="metaTestes"></p></div><button type="button" class="fechar" data-fechar aria-label="Fechar e cancelar os testes">×</button></header>
+    <div class="conteudo testes-corpo">
+      <iframe id="previaApp" title="Prévia do app em teste" src="about:blank"></iframe>
+      <ol id="listaTestes" class="lista-testes" aria-live="polite"></ol>
+    </div>
+    <footer class="rodape"><p id="resumoTestes" class="meta"></p></footer>
   </dialog>
 
   <dialog id="dlgLogin" class="dialogo estreito" aria-labelledby="tituloLogin">

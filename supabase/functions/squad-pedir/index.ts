@@ -4,6 +4,7 @@
 //  - { acao: "responder", id, respostas: [...] }   respostas às perguntas da Ana
 //  - { acao: "decidir", id, portao: "prd" | "arquitetura", aprovado, comentario? }
 //  - { acao: "retomar", id }                       reabre um passo que parou
+//  - { acao: "testes", id, rodada, testes | pulado } resultado dos testes que o navegador rodou
 // Toda escrita usa a service role; o navegador só lê (RLS).
 import { createClient } from 'npm:@supabase/supabase-js@2.110.5';
 
@@ -15,7 +16,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const ETAPAS_AUTOMATICAS = ['entrevista', 'prd', 'arquitetura', 'migracao', 'planejamento', 'desenvolvimento', 'integracao', 'delivery'];
+const ETAPAS_AUTOMATICAS = ['entrevista', 'prd', 'arquitetura', 'migracao', 'planejamento', 'desenvolvimento', 'integracao', 'testes', 'delivery'];
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -164,12 +165,44 @@ async function decidir(userId: string, corpo: Record<string, unknown>) {
 async function retomar(userId: string, corpo: Record<string, unknown>) {
   const p = await projetoDoUsuario(userId, corpo.id);
   if (!ETAPAS_AUTOMATICAS.includes(p.etapa)) throw new Recusa('Este projeto não está numa etapa automática.', 409);
+  if (p.subpasso === 'navegador' && !p.erro) throw new Recusa('Os testes esperam o navegador: deixe o SquadTech aberto neste projeto.', 409);
   const parado = Date.now() - new Date(p.passo_em ?? p.atualizado_em).getTime() > 3 * 60_000;
   if (!p.erro && !parado) throw new Recusa('O squad ainda está trabalhando neste passo.', 409);
   await evento(p.id, 'sistema', { texto: 'Esteira retomada' });
   // Mudar `erro` dispara o trigger, que reenvia o passo atual para a esteira.
   const { error } = await servico.from('squad_projetos').update({ erro: null, passo_em: null, tentativas: 0 }).eq('id', p.id);
   if (error) throw error;
+  return json({ ok: true });
+}
+
+// Resultado dos testes do Igor no navegador. O texto vem do app gerado, então é
+// limitado e tratado como dado; quem interpreta é o Igor na esteira.
+const corta = (v: unknown, n: number) => String(v ?? '').slice(0, n);
+
+async function testes(userId: string, corpo: Record<string, unknown>) {
+  const p = await projetoDoUsuario(userId, corpo.id);
+  if (p.etapa !== 'testes' || p.subpasso !== 'navegador') throw new Recusa('Este projeto não está esperando os testes do navegador.', 409);
+  if (Number(corpo.rodada) !== p.rodada_qa) throw new Recusa('Esta rodada de testes já foi registrada.', 409);
+  const pulado = corpo.pulado === true;
+  const lista = Array.isArray(corpo.testes) ? corpo.testes.slice(0, 15) : [];
+  if (!pulado && !lista.length) throw new Recusa('Nenhum resultado de teste recebido.');
+  const resultados = lista.map((t: Record<string, unknown>) => ({
+    id: corta(t.id, 20), nome: corta(t.nome, 160), ok: t.ok === true,
+    erro: corta(t.erro, 400), passo: Number.isInteger(t.passo) ? t.passo : null,
+    console: (Array.isArray(t.console) ? t.console : []).slice(0, 8).map((c: unknown) => corta(c, 300)),
+    tela: corta(t.tela, 1500), ms: Number(t.ms) || 0,
+  }));
+  const ok = resultados.filter((t) => t.ok).length;
+  const aprovado = !pulado && ok === resultados.length;
+  const { error } = await servico.from('squad_testes').insert({ projeto_id: p.id, rodada: p.rodada_qa, origem: 'navegador', aprovado, resultado: { pulado, testes: resultados } });
+  if (error) throw error;
+  await evento(p.id, 'sistema', {
+    sala: 'testes',
+    texto: pulado ? 'Você pulou os testes no navegador' : `Testes no navegador (rodada ${p.rodada_qa}): ${ok} de ${resultados.length} passaram`,
+    dados: { painel: pulado ? 'parado' : aprovado ? 'ok' : 'falha' },
+  });
+  const { error: e2 } = await servico.from('squad_projetos').update({ subpasso: 'igor_avalia', passo_em: null, tentativas: 0 }).eq('id', p.id);
+  if (e2) throw e2;
   return json({ ok: true });
 }
 
@@ -195,6 +228,7 @@ Deno.serve(async (req) => {
       case 'responder': return await responder(auth.user.id, corpo);
       case 'decidir': return await decidir(auth.user.id, corpo);
       case 'retomar': return await retomar(auth.user.id, corpo);
+      case 'testes': return await testes(auth.user.id, corpo);
       default: return json({ erro: 'ação desconhecida' }, 400);
     }
   } catch (e) {

@@ -5,10 +5,14 @@
 import { atualizar, config, emitir, estado, fala, perguntar, type Projeto, supabase } from './nucleo.ts';
 import { commitarArquivos } from './github.ts';
 import { FORMATO_LUCAS, LUCAS } from './prompts.ts';
-import { arquivosGerados, carregarPlano, salvarArquivo } from './sala-desenvolvimento.ts';
+import { arquivosGerados, carregarPlano, contextoProjeto, type Ponto, salvarArquivo } from './sala-desenvolvimento.ts';
 import type { Problema } from './verificacoes.ts';
 
-interface Ponto { arquivo: string; problema: string; correcao: string }
+interface Resultado { id: string; nome: string; ok: boolean; erro?: string; passo?: number }
+interface Qa {
+  rodadas: number; pulado: boolean; resultados: Resultado[]; manual: string[];
+  julia: (Ponto & { severidade: string })[]; correcoes: Ponto[]; pendencias: Ponto[];
+}
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
@@ -35,34 +39,88 @@ async function salvarDoc(p: Projeto, caminho: string, conteudo: string) {
   if (error) throw error;
 }
 
-function relatorio(nome: string, pontos: Ponto[], finais: Problema[]): string {
-  const revisao = pontos.length
-    ? pontos.map((x) => `- **${x.arquivo}**: ${x.problema} _Correção aplicada:_ ${x.correcao}`).join('\n')
-    : '- Nenhum problema de integração encontrado.';
+const itens = (pontos: Ponto[], vazio: string) => (pontos.length ? pontos.map((x) => `- **${x.arquivo}**: ${x.problema} _Correção:_ ${x.correcao}`).join('\n') : `- ${vazio}`);
+
+function relatorio(nome: string, pontos: Ponto[], finais: Problema[], qa: Qa | null): string {
   const alertas = finais.length ? finais.map((x) => `- **${x.arquivo}**: ${x.problema}`).join('\n') : '- Sem alertas.';
-  return `# Relatório de testes · ${nome}\n\n**Situação:** revisão de integração concluída. Os testes automáticos no navegador (Igor e Júlia, Sala 4) entram na Fase 4 do SquadTech.\n\n## Revisão de integração (Eduardo)\n\n${revisao}\n\n## Verificação automática final\n\nImports, referências do HTML, contratos de export, caminhos relativos e padrões inseguros.\n\n${alertas}\n`;
+  let testes = '_Sem dados da Sala de Testes._';
+  let situacao = 'revisão de integração concluída.';
+  if (qa?.pulado) {
+    situacao = 'os testes automáticos no navegador foram pulados a pedido do cliente.';
+    testes = '- Testes no navegador não executados.';
+  } else if (qa) {
+    const ok = qa.resultados.filter((t) => t.ok).length;
+    situacao = qa.pendencias.length
+      ? `entregue com ${qa.pendencias.length} pendências depois de ${qa.rodadas} rodadas de QA (limite atingido).`
+      : `${ok} de ${qa.resultados.length} testes automáticos passando no navegador, em ${qa.rodadas} ${qa.rodadas === 1 ? 'rodada' : 'rodadas'} de QA.`;
+    testes = `| Teste | Resultado |\n|---|---|\n${qa.resultados.map((t) => `| ${t.id} · ${t.nome} | ${t.ok ? 'passou' : `falhou no passo ${t.passo ?? '?'}: ${(t.erro ?? '').replace(/\|/g, '/')}`} |`).join('\n')}`;
+  }
+  const melhorias = (qa?.julia ?? []).filter((x) => x.severidade === 'melhoria');
+  return `# Relatório de testes · ${nome}
+
+**Situação:** ${situacao}
+
+## Testes automáticos no navegador (Igor)
+
+${testes}
+
+## Pendências
+
+${itens(qa?.pendencias ?? [], 'Nenhuma.')}
+
+## Correções feitas pelo QA
+
+${itens(qa?.correcoes ?? [], 'Nenhuma.')}
+
+## Revisão de código e segurança (Júlia): melhorias sugeridas
+
+${itens(melhorias, 'Nenhuma.')}
+
+## Roteiro de teste manual
+
+${(qa?.manual ?? []).length ? qa!.manual.map((m) => `- [ ] ${m}`).join('\n') : '- Nenhum item.'}
+
+## Revisão de integração (Eduardo)
+
+${itens(pontos, 'Nenhum problema de integração encontrado.')}
+
+## Verificação automática final
+
+Imports, referências do HTML, contratos de export, caminhos relativos e padrões inseguros.
+
+${alertas}
+`;
+}
+
+// js/config.js do app (URL e chave publishable do Supabase). Criado já na Sala de Testes,
+// porque a prévia no navegador precisa dele; só grava de novo se mudar.
+export async function garantirConfig(p: Projeto) {
+  const { plano } = await carregarPlano(p);
+  if (!plano.usa_supabase) return;
+  const cfg = await config();
+  const conteudo = `// Gerado pelo SquadTech. A chave publishable foi feita para ficar no navegador:\n// o acesso aos dados é controlado pelas políticas de RLS das tabelas ${plano.prefixo}*.\nexport const SUPABASE_URL = '${Deno.env.get('SUPABASE_URL')}';\nexport const SUPABASE_CHAVE = '${cfg.chave_publishable}';\n`;
+  const atual = (await arquivosGerados(p)).get('js/config.js');
+  if (atual?.conteudo !== conteudo) await salvarArquivo(p, 'js/config.js', conteudo, 'lucas', (atual?.versao ?? 0) + 1);
 }
 
 async function lucasDocumenta(p: Projeto) {
-  const { plano, doc, prd } = await carregarPlano(p);
-  const cfg = await config();
+  const { doc, prd } = await carregarPlano(p);
   const gerados = await arquivosGerados(p);
   const { app } = await enderecos(p);
   const pontos = (p.rascunho.pontos_integracao as Ponto[]) ?? [];
   const finais = (p.rascunho.verificacao_final as Problema[]) ?? [];
+  const qa = (p.rascunho.qa as Qa) ?? null;
+  const rel = relatorio(p.nome, pontos, finais, qa);
   await estado(p, 'lucas', 'digitando');
-  const r = await perguntar<{ readme_markdown: string; fala_para_usuario: string }>(p, LUCAS,
-    `<prd>\n${prd}\n</prd>\n\n<arquitetura>\n${doc}\n</arquitetura>\n\nArquivos entregues: ${[...gerados.keys()].join(', ')}\nLink do app: ${app}\nAlertas automáticos pendentes: ${finais.length ? finais.map((x) => `${x.arquivo}: ${x.problema}`).join(' | ') : 'nenhum'}\n\nTarefa: escreva o README.md da entrega, para quem vai usar e testar: o que o app faz (3 linhas), link de acesso, como usar passo a passo por perfil de usuário, como testar os critérios de aceite principais, onde os dados ficam e cuidados de LGPD, limitações conhecidas e o que ficou para depois, e a estrutura da pasta (docs/ tem PRD.md, ARQUITETURA.md e RELATORIO-TESTES.md). Em "fala_para_usuario", avise em uma frase que a documentação está pronta.`,
-    FORMATO_LUCAS, 'low', 6000);
+  const r = await perguntar<{ readme_markdown: string; fala_para_usuario: string }>(p, { contexto: await contextoProjeto(p), persona: LUCAS },
+    `Arquivos entregues: ${[...gerados.keys()].join(', ')}\nLink do app: ${app}\n\nRelatório de testes (vai em docs/RELATORIO-TESTES.md):\n${rel}\n\nTarefa: escreva o README.md da entrega, para quem vai usar e testar: o que o app faz (3 linhas), link de acesso, "Como entrar" (se tiver login: use a mesma conta do SquadTech, e-mail e senha do Supabase do Rodrigo; como recuperar a senha pelo próprio app; se outras pessoas precisarem de conta, como criar), como usar passo a passo por perfil de usuário, situação dos testes e roteiro manual, onde os dados ficam e cuidados de LGPD, limitações e pendências conhecidas e o que ficou para depois, e a estrutura da pasta (docs/ tem PRD.md, ARQUITETURA.md e RELATORIO-TESTES.md). Em "fala_para_usuario", avise em uma frase que a documentação está pronta e a situação dos testes.`,
+    FORMATO_LUCAS, 'low', 7000);
 
   await salvarDoc(p, 'docs/README.md', r.readme_markdown);
   await salvarDoc(p, 'docs/PRD.md', prd);
   await salvarDoc(p, 'docs/ARQUITETURA.md', doc);
-  await salvarDoc(p, 'docs/RELATORIO-TESTES.md', relatorio(p.nome, pontos, finais));
-  if (plano.usa_supabase) {
-    const configJs = `// Gerado pelo SquadTech. A chave publishable foi feita para ficar no navegador:\n// o acesso aos dados é controlado pelas políticas de RLS das tabelas ${plano.prefixo}*.\nexport const SUPABASE_URL = '${Deno.env.get('SUPABASE_URL')}';\nexport const SUPABASE_CHAVE = '${cfg.chave_publishable}';\n`;
-    await salvarArquivo(p, 'js/config.js', configJs, 'lucas', (gerados.get('js/config.js')?.versao ?? 0) + 1);
-  }
+  await salvarDoc(p, 'docs/RELATORIO-TESTES.md', rel);
+  await garantirConfig(p);
   await emitir(p, 'artefato', 'lucas', null, { dados: { tipo: 'entrega', caminho: 'docs/README.md', titulo: 'README da entrega', autor: 'lucas', conteudo: r.readme_markdown } });
   await fala(p, 'lucas', 'usuario', r.fala_para_usuario);
   await atualizar(p, { subpasso: 'lucas_publica', passo_em: null, tentativas: 0 });

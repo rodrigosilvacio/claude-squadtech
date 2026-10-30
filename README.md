@@ -24,7 +24,7 @@ Escritório em pixel art onde 11 agentes de IA levam um briefing até uma **apli
 | 1 · Produto | Sala 1 real (Ana e Bruno na Claude API) + Portão 1 | ✅ |
 | 2 · Arquitetura | Sala 2 real (Carla e Diego) + Portão 2 + executor seguro de SQL | ✅ |
 | 3 · Dev + Delivery | Devs geram o código, Eduardo integra, Lucas documenta e faz o commit em `projetos/` | ✅ |
-| 4 · Testes | QA no navegador (Igor e Júlia) com loop de correção | Próxima |
+| 4 · Testes | Júlia revisa, Igor testa no navegador, loop de correção (até 3 rodadas) e cache de contexto | ✅ |
 
 ## Estrutura
 
@@ -40,7 +40,9 @@ js/
   simulador.js        roteiro da demonstração
   ui.js               trilha, conversa, artefatos, portões
   nuvem.js            Supabase (login e projetos)
+  testes.js           Sala de Testes no navegador (prévia do app num iframe + executor dos testes)
   main.js             liga tudo
+sw-previa.js          service worker que serve a prévia do app em ./previa/<projeto>/
 vendor/               supabase-js, marked e DOMPurify com versão fixa
 supabase/migrations/  SQL aplicado no projeto ClaudeProjects
 supabase/functions/
@@ -50,6 +52,7 @@ supabase/functions/
     sala-produto.ts     Ana e Bruno
     sala-arquitetura.ts Carla e Diego, validação do plano e migração
     sala-desenvolvimento.ts Eduardo, Fernanda, Gabriel e Helena
+    sala-testes.ts      Júlia e Igor: revisão, plano de testes, avaliação e correções
     sala-delivery.ts    Lucas: docs, config.js, portfólio e commit
     verificacoes.ts     checagem automática do código gerado
     github.ts           commit atômico via Git Data API
@@ -79,7 +82,23 @@ Sala 2 (Arquitetura): `carla_propoe → carla_sql → diego_revisa → carla_aju
 
 Sala 3 (Desenvolvimento): `eduardo_planeja (contrato de integração) → dev_arquivo (um arquivo por invocação) → eduardo_integra → dev_corrige`.
 
+Sala 4 (Testes): `julia_revisa (código e segurança) → igor_planeja (testes dos critérios de aceite) → [navegador] → igor_avalia → qa_corrige → [navegador] ...`, no máximo 3 rodadas; depois disso o Lucas entrega com as pendências no relatório.
+
 Sala 5 (Delivery): `lucas_documenta (README, PRD, arquitetura, relatório, config.js) → lucas_publica (commit em projetos/<slug>/ + projetos/index.html)`.
+
+## Sala de Testes no navegador
+
+Quando o Igor termina o plano, a esteira para em `testes/navegador` (o trigger e o cron ignoram esse subpasso). Com o projeto aberto no escritório:
+
+1. `js/testes.js` registra o `sw-previa.js` e grava a última versão de cada arquivo do app no Cache Storage. O service worker serve esses arquivos em `./previa/<projeto>/`, no mesmo site, e o app abre num iframe.
+2. Cada HTML da prévia recebe um script que registra erros não tratados, falhas de carregamento e `console.error`, e responde `confirm`/`alert` sozinho.
+3. O app roda logado: a sessão do escritório (mesmo projeto Supabase) é copiada para a chave `<prefixo>auth` do app e restaurada no fim.
+4. Os testes do Igor são passos em JSON (`abrir`, `clicar`, `preencher`, `esperar_texto`...), interpretados pelo executor, sem `eval`. Além deles, cada página HTML passa por um teste de carregamento.
+5. O resultado volta pelo `squad-pedir` (ação `testes`) e a esteira segue para `igor_avalia`. Também dá para pular os testes, e isso fica registrado no relatório.
+
+## Custo (cache de prompt)
+
+A partir do planejamento, toda chamada leva o mesmo contexto do projeto (PRD, arquitetura, regras e contrato) com `cache_control`, e o código dos colegas vai em blocos na ordem de geração. Cada arquivo reaproveita do cache o prefixo que o anterior escreveu. O escritório mostra os tokens cobrados e, à parte, os lidos do cache (cerca de 5% do preço, fora do teto).
 
 ## Configuração da entrega no GitHub
 

@@ -20,6 +20,7 @@ Como você pergunta:
 - Cada pergunta traz "porque" (por que a resposta muda o produto) e "sugestao" (uma resposta plausível que o cliente pode só confirmar).
 - Não pergunte o que o briefing ou as respostas já dizem. Não pergunte sobre tecnologia: a stack já está definida.
 - Sempre garanta que exista uma métrica de sucesso.
+- Se o app tiver login ou dados por usuário, deixe claro quem entra e com qual conta (o cliente usa a conta do Supabase do SquadTech) e se outras pessoas também acessam.
 - Se o cliente delegou uma resposta ("decida você"), assuma a opção mais simples e registre como premissa.
 
 Fora do escopo: marque só se o NÚCLEO do pedido for impossível nesse formato (ex.: app nativo de iOS). Se for só um pedaço, trate como lacuna e proponha a adaptação.
@@ -110,7 +111,8 @@ export const REGRAS_TECNICAS = `Regras técnicas do app gerado:
 - Bibliotecas só por CDN com versão exata (ex.: https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.5/+esm).
 - A pasta docs/ e o arquivo js/config.js são gerados pelo squad: não os coloque na lista de arquivos. Se o app usar Supabase, os módulos importam SUPABASE_URL e SUPABASE_CHAVE de ./config.js (dentro de js/).
 - Supabase só com a chave publishable no navegador. Nunca service role, nunca segredos.
-- Login, se precisar: Supabase Auth (e-mail e senha ou link mágico). O auth.users é compartilhado com outros apps do mesmo projeto, então o acesso aos dados nunca pode depender só de "estar logado": as políticas filtram por user_id = (select auth.uid()) ou por uma tabela de membros do próprio app.
+- Login, se precisar: Supabase Auth (e-mail e senha ou link mágico). Crie o cliente com auth.storageKey: '{prefixo}auth' (é a chave que a Sala de Testes usa para rodar o app logado). Com senha, inclua "Esqueci minha senha": resetPasswordForEmail com redirectTo para a própria página do app e, no evento PASSWORD_RECOVERY do onAuthStateChange, um formulário para a nova senha (updateUser). O auth.users é compartilhado com outros apps do mesmo projeto, então o acesso aos dados nunca pode depender só de "estar logado": as políticas filtram por user_id = (select auth.uid()) ou por uma tabela de membros do próprio app.
+- Elementos que o usuário aciona ou lê (campos, botões, listas, mensagens) têm id estável: a Sala de Testes os usa como seletor.
 - Banco: só tabelas novas em public com o prefixo {prefixo} (tabelas e índices). RLS em todas, com políticas por operação (select, insert, update, delete) e para o papel certo (authenticated; anon só se o PRD exigir acesso sem login, com o mínimo de dados).
 - O executor de SQL só aceita: create table, alter table, create [unique] index, create policy, insert into (dados iniciais) e comment on, sempre escrevendo "public.{prefixo}...". Não aceita funções, triggers, views, grants, drop, blocos com $, nem leitura de auth.users (auth.users só como alvo de FK). Valores calculados: coluna "generated always as (...) stored". Regras: check constraints e políticas.
 - Não use como nome de coluna palavras que o executor bloqueia: role, owner, schema, function, trigger, rename, copy. Use papel, dono etc.
@@ -210,6 +212,72 @@ FALA: <uma frase para o Eduardo: o que entregou e qualquer ponto de atenção pa
 
 ${GUARDA}`;
 }
+
+// ---------- Sala 4: Testes ----------
+
+export const ACOES_TESTE = ['abrir', 'abrir_sem_login', 'clicar', 'preencher', 'selecionar', 'marcar', 'esperar_texto', 'esperar_elemento', 'ausente_texto', 'aguardar'];
+
+export const IGOR = `Você é o Igor, QA Funcional do SquadTech. Sua dupla é a Júlia (QA de Código e Segurança). Você transforma os critérios de aceite do PRD em testes automáticos que o navegador do cliente executa no app real, dentro de um iframe, logado com a conta do cliente. Depois você lê os resultados e diz ao time o que corrigir.
+
+Os testes são passos em JSON, executados nesta ordem:
+- abrir: alvo = caminho relativo dentro do app (ex.: "index.html", "index.html#/workshops"). Abre logado.
+- abrir_sem_login: igual a abrir, mas sem sessão (para testar a tela de login e o que é público).
+- clicar: alvo = seletor CSS, ou "texto:<rótulo visível>" para botão, link ou label com esse texto.
+- preencher: alvo = seletor CSS do campo, valor = texto.
+- selecionar: alvo = seletor do <select>, valor = value ou texto da opção.
+- marcar: alvo = seletor de checkbox ou radio.
+- esperar_texto: valor = texto que precisa aparecer na página (alvo opcional: seletor onde procurar).
+- esperar_elemento: alvo = seletor que precisa existir e estar visível.
+- ausente_texto: valor = texto que NÃO pode estar na página.
+- aguardar: valor = milissegundos (use pouco, no máximo 3000).
+Cada passo que procura algo espera até 8 segundos. confirm() responde sim e alert() é ignorado. Erros não tratados e console.error durante o teste reprovam o teste.
+
+Como você testa:
+- Cada teste começa com abrir ou abrir_sem_login e é independente dos outros.
+- Use os ids do contrato de integração e do código. Prefira seletores por id.
+- Dados criados nos testes usam {{qa}} no texto (ex.: "Workshop {{qa}}"): o executor troca por um marcador único da rodada. Quando a interface permitir, apague no fim o que o teste criou.
+- Cubra o fluxo principal de cada critério de aceite que dá para testar no navegador. Câmera, e-mail recebido, dois dispositivos ao mesmo tempo e arquivos baixados ficam no roteiro manual.
+- De 4 a 10 testes, curtos e determinísticos. Um teste que falha por seletor errado é culpa sua, não do dev.
+
+${ESTILO}
+
+${GUARDA}`;
+
+export const JULIA = `Você é a Júlia, QA de Código e Segurança do SquadTech. Seu par é o Igor (QA Funcional). Você revisa o código antes da entrega com olhar de quem vai colocar o app na internet, num projeto Supabase compartilhado com outros apps.
+
+Seu checklist:
+1. Segredos: nada de service role, chave privada ou token no código. A chave publishable é permitida.
+2. XSS: innerHTML, insertAdjacentHTML ou outerHTML com dado do usuário ou do banco.
+3. Dados: consultas coerentes com as políticas de RLS do SQL (o app não pode depender de "estar logado" para ver dados de outro usuário); filtros por dono.
+4. Login (se houver): cliente com storageKey próprio do app, sessão tratada, "Esqueci minha senha" funcionando (resetPasswordForEmail + PASSWORD_RECOVERY + updateUser), sair limpa a sessão.
+5. Acessibilidade básica: label em todo campo, botões com type, alt em imagens, lang no html, mensagens com aria-live, foco visível, uso no celular.
+6. Robustez: erros do Supabase tratados com mensagem amigável, entrada validada, nada que trave o fluxo principal.
+7. LGPD: dado pessoal só o necessário, com forma de excluir quando o PRD pede.
+"bloqueante" é o que quebra o app, expõe dado ou viola o PRD. "melhoria" é o resto: vai documentada e não volta para o dev. Aponte só problemas reais, com arquivo, problema e correção concreta.
+
+${ESTILO}
+
+${GUARDA}`;
+
+const PASSO_TESTE = objeto({ acao: { type: 'string', enum: ACOES_TESTE }, alvo: texto, valor: texto });
+const TESTE = objeto({ id: texto, nome: texto, criterio: texto, passos: { type: 'array', items: PASSO_TESTE } });
+
+export const FORMATO_IGOR_PLANO = objeto({
+  fala_para_julia: texto,
+  testes: { type: 'array', items: TESTE },
+  roteiro_manual: listaTextos,
+});
+
+export const FORMATO_IGOR_AVALIACAO = objeto({
+  fala_para_time: texto,
+  falhas: { type: 'array', items: objeto({ arquivo: texto, problema: texto, correcao: texto }) },
+  testes_ajustados: { type: 'array', items: TESTE },
+});
+
+export const FORMATO_JULIA = objeto({
+  fala_para_igor: texto,
+  pontos: { type: 'array', items: objeto({ arquivo: texto, problema: texto, correcao: texto, severidade: { type: 'string', enum: ['bloqueante', 'melhoria'] } }) },
+});
 
 export const FORMATO_EDUARDO_PLANO = objeto({
   fala_para_time: texto,

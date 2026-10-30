@@ -278,3 +278,21 @@ textarea:disabled { opacity: 0.4; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Sala de Testes ---------- */
+.faixa-testes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; background: #2a2440; border: 1px solid #6c5ce7; font-size: 14px; }
+.faixa-testes[hidden] { display: none; }
+.faixa-testes span { flex: 1 1 240px; }
+.testes-corpo { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; }
+#previaApp { width: 100%; height: min(62vh, 640px); border: 1px solid #2c3045; border-radius: 8px; background: #fff; }
+.lista-testes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; align-content: start; max-height: min(62vh, 640px); overflow: auto; font-size: 13px; }
+.lista-testes li { padding: 6px 8px; border-radius: 6px; background: #1d2030; border-left: 3px solid #3a3f55; overflow-wrap: anywhere; }
+.lista-testes li[data-estado="rodando"] { border-left-color: #ffd166; }
+.lista-testes li[data-estado="ok"] { border-left-color: #80ed99; }
+.lista-testes li[data-estado="falha"] { border-left-color: #ef476f; }
+.lista-testes small { display: block; color: #a6a4bd; margin-top: 2px; }
+@media (max-width: 720px) {
+  .testes-corpo { grid-template-columns: 1fr; }
+  #previaApp { height: 48vh; }
+  .lista-testes { max-height: none; }
+}

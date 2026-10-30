@@ -58,6 +58,7 @@ const STATUS_ETAPA = {
   planejamento: 'Sala 3 · Eduardo distribuindo as tarefas',
   desenvolvimento: 'Sala 3 · Devs escrevendo o código',
   integracao: 'Sala 3 · Eduardo revisando a integração',
+  testes: 'Sala 4 · Júlia e Igor testando o app',
   delivery: 'Sala 5 · Lucas preparando a entrega',
   concluido: 'Entregue',
   escalado: 'Encerrado pela Ana',
@@ -335,7 +336,8 @@ export class UI {
 
   // Estado do projeto real (squad_projetos): status, faixa de erro e botão de retomar.
   atualizarProjeto(p, { aoRetomar } = {}) {
-    if (STATUS_ETAPA[p.etapa]) this.status(STATUS_ETAPA[p.etapa]);
+    if (p.etapa === 'testes' && p.subpasso === 'navegador') this.status('Sala 4 · Aguardando seu navegador para rodar os testes');
+    else if (STATUS_ETAPA[p.etapa]) this.status(STATUS_ETAPA[p.etapa]);
     const faixa = $('#projetoErro');
     faixa.hidden = !p.erro;
     if (p.erro) {
@@ -344,7 +346,7 @@ export class UI {
         el('button', { type: 'button', class: 'botao', onclick: aoRetomar }, 'Retomar'));
     }
     $('#projetoTokens').textContent = p.tokens_entrada != null
-      ? `${Math.round((p.tokens_entrada + p.tokens_saida) / 1000)} mil tokens` : '';
+      ? `${Math.round((p.tokens_entrada + p.tokens_saida) / 1000)} mil tokens${p.tokens_cache ? ` + ${Math.round(p.tokens_cache / 1000)} mil do cache` : ''}` : '';
     $('#projetoLinks').replaceChildren(...(p.url_app ? [
       el('a', { href: p.url_app, target: '_blank', rel: 'noopener' }, 'Abrir app'),
       el('button', { type: 'button', class: 'link', onclick: () => this.aoBaixarZip?.() }, 'Baixar zip'),
@@ -371,6 +373,7 @@ export class UI {
     $('#briefing').hidden = false;
     $('#projetoBarra').hidden = true;
     $('#projetoErro').hidden = true;
+    $('#projetoTestes').hidden = true;
     $('#projetoTokens').textContent = '';
     $('#projetoLinks').replaceChildren();
   }

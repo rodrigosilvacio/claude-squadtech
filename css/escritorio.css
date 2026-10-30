@@ -298,3 +298,7 @@ textarea:disabled { opacity: 0.4; }
 }
 
 .acoes-projeto { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 8px; }
+
+.previa-fundo { position: fixed; left: -12000px; top: 0; width: 1024px; height: 768px; border: 0; pointer-events: none; }
+.aviso-testes { position: fixed; right: 16px; bottom: 16px; z-index: 40; max-width: min(380px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 10px; background: #2a2440; border: 1px solid #6c5ce7; color: #eceaf6; font-size: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+.aviso-testes[hidden] { display: none; }

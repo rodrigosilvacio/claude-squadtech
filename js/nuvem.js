@@ -92,6 +92,14 @@ export const nuvem = {
     }
   },
 
+  // Projetos parados esperando o navegador rodar os testes do Igor.
+  async projetosEsperandoTestes() {
+    const { data, error } = await cliente.from('squad_projetos').select('id, nome, etapa, subpasso, erro, rodada_qa')
+      .eq('etapa', 'testes').eq('subpasso', 'navegador').is('erro', null).order('atualizado_em');
+    if (error) throw error;
+    return data;
+  },
+
   // Testes do Igor que esperam o navegador.
   async testesPendentes(id) {
     const { data, error } = await cliente.from('squad_projetos').select('rascunho, rodada_qa, prefixo_db').eq('id', id).single();

@@ -116,6 +116,10 @@
     <div class="conteudo"></div>
   </dialog>
 
+  <!-- Sala de Testes em segundo plano: iframe fora da tela (precisa de layout para os testes) e aviso discreto. -->
+  <iframe id="previaFundo" class="previa-fundo" title="Prévia em teste (segundo plano)" src="about:blank" tabindex="-1" aria-hidden="true"></iframe>
+  <div id="avisoTestes" class="aviso-testes" role="status" aria-live="polite" hidden></div>
+
   <dialog id="dlgTestes" class="dialogo largo" aria-labelledby="tituloTestes">
     <header><div><h2 id="tituloTestes">Sala de Testes</h2><p class="meta" id="metaTestes"></p></div><button type="button" class="fechar" data-fechar aria-label="Fechar e cancelar os testes">×</button></header>
     <div class="conteudo testes-corpo">

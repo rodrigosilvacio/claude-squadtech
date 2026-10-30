@@ -95,6 +95,7 @@ Quando o Igor termina o plano, a esteira para em `testes/navegador` (o trigger e
 3. O app roda logado: a sessão do escritório (mesmo projeto Supabase) é copiada para a chave `<prefixo>auth` do app e restaurada no fim.
 4. Os testes do Igor são passos em JSON (`abrir`, `clicar`, `preencher`, `esperar_texto`...), interpretados pelo executor, sem `eval`. Além deles, cada página HTML passa por um teste de carregamento.
 5. O resultado volta pelo `squad-pedir` (ação `testes`) e a esteira segue para `igor_avalia`. Também dá para pular os testes, e isso fica registrado no relatório.
+6. **Segundo plano:** com o SquadTech aberto e logado em qualquer tela, o escritório verifica a cada 20 s se algum projeto espera testes e os roda num iframe fora da tela, com um aviso discreto no canto. O projeto aberto no escritório roda na janela da Sala de Testes. Basta deixar uma aba do SquadTech aberta.
 
 ## Custo (cache de prompt)
 

@@ -17,7 +17,8 @@ const dlgTestes = $('#dlgTestes');
 const salaTestes = SalaTestes.suportado() ? new SalaTestes({ nuvem, iframe: $('#previaApp') }) : null;
 let emDemo = false;
 let testeEmCurso = null;
-const rodadasIniciadas = new Set(); // cada rodada abre sozinha uma vez; depois, pelo botão
+const rodadasIniciadas = new Set(); // cada rodada roda sozinha uma vez; depois, pelo botão
+const falhasRodada = new Map(); // erro de rede numa rodada em segundo plano: tenta de novo (até 3 vezes)
 
 // ---------- projeto real ----------
 // Reabrir = histórico instantâneo no painel + portão pendente (se houver) +
@@ -26,7 +27,7 @@ const rodadasIniciadas = new Set(); // cada rodada abre sozinha uma vez; depois,
 let sessao = null; // { id, ultimoId, buscando, parar, timer }
 
 function fecharSessao() {
-  if (testeEmCurso && salaTestes) salaTestes.cancelado = true;
+  if (testeEmCurso && testeEmCurso === sessao?.id && salaTestes) salaTestes.cancelado = true;
   if (!sessao) return;
   sessao.parar?.();
   clearInterval(sessao.timer);
@@ -103,6 +104,8 @@ function mostrarProjeto(p) {
 // ---------- Sala de Testes no navegador ----------
 // Quando a esteira chega em testes/navegador, o escritório roda os testes do Igor
 // num iframe com a prévia do app e devolve o resultado ao squad-pedir.
+// O projeto aberto roda na janela da Sala de Testes; os outros rodam em segundo
+// plano, num iframe fora da tela, enquanto o SquadTech estiver aberto e logado.
 
 function verificarTestes(p) {
   const espera = !emDemo && p?.etapa === 'testes' && p.subpasso === 'navegador' && !p.erro;
@@ -111,7 +114,7 @@ function verificarTestes(p) {
   const chave = `${p.id}:${p.rodada_qa}`;
   if (rodadasIniciadas.has(chave)) return;
   rodadasIniciadas.add(chave);
-  rodarTestes();
+  rodarTestes(p.id, { nome: p.nome, chave });
 }
 
 function itemTeste(t) {
@@ -121,53 +124,93 @@ function itemTeste(t) {
   return li;
 }
 
-async function rodarTestes() {
-  if (!sessao || testeEmCurso) return;
+function avisoFundo(texto) {
+  const caixa = $('#avisoTestes');
+  caixa.hidden = !texto;
+  caixa.textContent = texto ?? '';
+}
+
+async function rodarTestes(id = sessao?.id, { nome = '', chave = null } = {}) {
+  if (!id || testeEmCurso) return;
   if (!salaTestes) {
     ui.registrarSistema('Este navegador não roda a Sala de Testes (precisa de service worker, em https). Use um Chrome ou Safari atualizado, ou "Pular testes".', { erro: true });
     return;
   }
-  const id = sessao.id;
+  const visivel = sessao?.id === id;
   const lista = $('#listaTestes');
   const resumo = $('#resumoTestes');
+  const mostrar = (texto) => { if (visivel) resumo.textContent = texto; else avisoFundo(texto); };
   testeEmCurso = id;
+  salaTestes.iframe = visivel ? $('#previaApp') : $('#previaFundo');
   try {
     const { testes, rodada, prefixo } = await nuvem.testesPendentes(id);
-    $('#metaTestes').textContent = `Rodada ${rodada} · ${testes.length} testes do Igor, mais o carregamento de cada página`;
-    lista.replaceChildren();
-    resumo.textContent = 'Montando a prévia do app...';
-    if (!dlgTestes.open) dlgTestes.showModal();
+    if (visivel) {
+      $('#metaTestes').textContent = `Rodada ${rodada} · ${testes.length} testes do Igor, mais o carregamento de cada página`;
+      lista.replaceChildren();
+      if (!dlgTestes.open) dlgTestes.showModal();
+    }
+    mostrar(visivel ? 'Montando a prévia do app...' : `Sala 4 · preparando os testes de ${nome}...`);
     const resultados = await salaTestes.rodar({ projetoId: id, prefixo, testes }, (i, total, t, r) => {
-      let li = lista.querySelector(`[data-id="${CSS.escape(t.id)}"]`);
-      if (!li) li = lista.appendChild(itemTeste(t));
-      li.dataset.estado = r ? (r.ok ? 'ok' : 'falha') : 'rodando';
-      if (r && !r.ok) {
-        const det = document.createElement('small');
-        det.textContent = `Passo ${r.passo}: ${r.erro}`;
-        li.append(det);
+      if (visivel) {
+        let li = lista.querySelector(`[data-id="${CSS.escape(t.id)}"]`);
+        if (!li) li = lista.appendChild(itemTeste(t));
+        li.dataset.estado = r ? (r.ok ? 'ok' : 'falha') : 'rodando';
+        if (r && !r.ok) {
+          const det = document.createElement('small');
+          det.textContent = `Passo ${r.passo}: ${r.erro}`;
+          li.append(det);
+        }
+        if (!r) li.scrollIntoView({ block: 'nearest' });
       }
-      if (!r) li.scrollIntoView({ block: 'nearest' });
-      resumo.textContent = `Rodando ${i + 1} de ${total}...`;
+      mostrar(visivel ? `Rodando ${i + 1} de ${total}...` : `Sala 4 · testando ${nome} em segundo plano (${i + 1} de ${total})`);
     });
-    if (salaTestes.cancelado || sessao?.id !== id) {
-      resumo.textContent = 'Testes cancelados.';
+    if (salaTestes.cancelado || (visivel && sessao?.id !== id)) {
+      mostrar(visivel ? 'Testes cancelados.' : null);
       return;
     }
     const ok = resultados.filter((r) => r.ok).length;
-    resumo.textContent = `${ok} de ${resultados.length} passaram. Enviando para o Igor...`;
+    mostrar(`${ok} de ${resultados.length} passaram. Enviando para o Igor...`);
     await nuvem.pedir('testes', { id, rodada, testes: resultados });
-    resumo.textContent = `${ok} de ${resultados.length} passaram. O Igor já está lendo o resultado.`;
-    setTimeout(() => { if (!testeEmCurso && dlgTestes.open) dlgTestes.close(); }, 3000);
+    if (visivel) {
+      resumo.textContent = `${ok} de ${resultados.length} passaram. O Igor já está lendo o resultado.`;
+      setTimeout(() => { if (!testeEmCurso && dlgTestes.open) dlgTestes.close(); }, 3000);
+    } else {
+      avisoFundo(`Sala 4 · ${nome}: ${ok} de ${resultados.length} testes passaram. O Igor já está lendo.`);
+      setTimeout(() => { if (!testeEmCurso) avisoFundo(null); }, 8000);
+    }
   } catch (e) {
-    resumo.textContent = `Os testes não rodaram: ${e.message}`;
-    ui.registrarSistema(`Os testes no navegador não rodaram: ${e.message}`, { erro: true });
+    mostrar(visivel ? `Os testes não rodaram: ${e.message}` : null);
+    if (visivel) ui.registrarSistema(`Os testes no navegador não rodaram: ${e.message}`, { erro: true });
+    if (chave) {
+      const n = (falhasRodada.get(chave) ?? 0) + 1;
+      falhasRodada.set(chave, n);
+      if (n < 3) rodadasIniciadas.delete(chave); // a próxima verificação tenta de novo
+    }
   } finally {
     testeEmCurso = null;
   }
 }
 
-dlgTestes.addEventListener('close', () => { if (testeEmCurso && salaTestes) salaTestes.cancelado = true; });
-$('#btnRodarTestes').addEventListener('click', rodarTestes);
+// Com o SquadTech aberto e logado, procura projetos esperando testes a cada 20 s.
+async function procurarTestesPendentes() {
+  if (emDemo || testeEmCurso || !salaTestes || !(await nuvem.usuario())) return;
+  try {
+    for (const p of await nuvem.projetosEsperandoTestes()) {
+      if (p.id === sessao?.id) { verificarTestes(p); return; }
+      const chave = `${p.id}:${p.rodada_qa}`;
+      if (rodadasIniciadas.has(chave)) continue;
+      rodadasIniciadas.add(chave);
+      await rodarTestes(p.id, { nome: p.nome, chave });
+      return;
+    }
+  } catch (e) {
+    console.warn('falha ao procurar testes pendentes', e);
+  }
+}
+setInterval(procurarTestesPendentes, 20_000);
+
+dlgTestes.addEventListener('close', () => { if (testeEmCurso && testeEmCurso === sessao?.id && salaTestes) salaTestes.cancelado = true; });
+$('#btnRodarTestes').addEventListener('click', () => rodarTestes());
 $('#btnPularTestes').addEventListener('click', async () => {
   if (!sessao || !confirm('Pular os testes no navegador? O Lucas entrega sem eles e registra isso no relatório.')) return;
   try {

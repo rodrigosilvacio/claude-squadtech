@@ -315,6 +315,7 @@ diretor.aoDecidirPortao = async (ev, decisao) => {
   const d = ev.dados ?? {};
   if (d.tipo === 'perguntas') await nuvem.pedir('responder', { id: sessao.id, respostas: decisao.respostas });
   else await nuvem.pedir('decidir', { id: sessao.id, portao: d.tipo, aprovado: decisao.aprovado, comentario: decisao.comentario });
+  atualizarPendencias();
 };
 
 // ---------- demonstração ----------
@@ -385,13 +386,31 @@ async function carregarProjetos() {
   try {
     const membro = await nuvem.ehMembro();
     const projetos = membro ? await nuvem.listarProjetos() : [];
-    ui.renderizarProjetos({ logado: true, membro, projetos, aoAbrir: (id) => abrirProjeto(id).catch((e) => ui.registrarSistema(e.message, { erro: true })) });
+    ui.renderizarProjetos({ logado: true, membro, projetos, aoAbrir: abrirDaLista });
+    ui.renderizarPendencias(projetos, abrirDaLista);
   } catch (err) {
     ui.renderizarProjetos({ logado: true, erro: `Não consegui carregar os projetos: ${err.message}` });
   }
 }
 
+function abrirDaLista(id) {
+  abrirProjeto(id).catch((e) => ui.registrarSistema(e.message, { erro: true }));
+  document.querySelector('.palco')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Painel "O que precisa de você" atualizado junto com a busca de testes pendentes.
+async function atualizarPendencias() {
+  if (emDemo || !(await nuvem.usuario())) { ui.renderizarPendencias([], abrirDaLista); return; }
+  try {
+    ui.renderizarPendencias(await nuvem.listarProjetos(), abrirDaLista);
+  } catch (e) {
+    console.warn('falha ao atualizar pendências', e);
+  }
+}
+setInterval(atualizarPendencias, 20_000);
+
 async function atualizarConta(usuario) {
+  ui.emailConta = usuario?.email ?? null;
   $('#btnConta').textContent = usuario ? 'Sair' : 'Entrar';
   $('#btnConta').title = usuario ? `Conectado como ${usuario.email}` : '';
   if (!usuario) fecharSessao();

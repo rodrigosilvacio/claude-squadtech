@@ -25,6 +25,8 @@ Escritório em pixel art onde 11 agentes de IA levam um briefing até uma **apli
 | 2 · Arquitetura | Sala 2 real (Carla e Diego) + Portão 2 + executor seguro de SQL | ✅ |
 | 3 · Dev + Delivery | Devs geram o código, Eduardo integra, Lucas documenta e faz o commit em `projetos/` | ✅ |
 | 4 · Testes | Júlia revisa, Igor testa no navegador, loop de correção (até 3 rodadas) e cache de contexto | ✅ |
+| 5 · Evolução | Pedir ajuste em app entregue (novo ciclo, só o que muda), apagar projeto e conta convidada com cota | ✅ |
+| 6A · Jornada | Painel "O que precisa de você", cards de projeto com próxima ação, botões de ação, "Como entrar no app" e erros em linguagem simples | ✅ |
 
 ## Estrutura
 

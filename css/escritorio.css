@@ -307,3 +307,50 @@ textarea:disabled { opacity: 0.4; }
 .botao.perigo:hover { background: #8f1d17; }
 .lista-apagar { margin: 0 0 4px; padding-left: 20px; display: grid; gap: 4px; }
 .link.perigo { color: #ff8a80; }
+
+/* ---------- Fase 6A · jornada sem atrito ---------- */
+a.botao { display: inline-flex; align-items: center; justify-content: center; color: var(--texto); text-decoration: none; }
+a.botao.primario { color: #15151f; }
+@media (pointer: coarse) { .botao { min-height: 44px; } }
+
+/* O que precisa de você */
+.pendencias { margin: 12px 16px 0; padding: 10px 14px; border-radius: var(--raio); background: #2d2414; border: 1px solid var(--alerta); display: grid; gap: 8px; }
+.pendencias[hidden] { display: none; }
+.titulo-pendencias { color: var(--alerta); font-size: 14px; }
+.pendencias ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pendencias li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.pendencias li span { font-weight: 600; }
+
+/* Ações do projeto aberto */
+.acoes-barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.acoes-barra[hidden] { display: none; }
+.botao.apagar { margin-left: auto; background: none; border-color: transparent; box-shadow: none; color: #ff8a80; font-weight: 500; }
+.botao.apagar:hover:not(:disabled) { background: #3a1622; border-color: var(--perigo); }
+
+/* Como entrar no app */
+.como-entrar { padding: 10px 14px; border-radius: var(--raio); background: #15283a; border: 1px solid var(--destaque-2); display: grid; gap: 4px; font-size: 13px; }
+.como-entrar p { margin: 0; }
+.como-entrar strong { color: var(--destaque-2); }
+#projetoEntrar[hidden] { display: none; }
+
+/* Erros humanos */
+.faixa-erro details { margin-top: 4px; font-size: 12px; color: #ffb3c4; }
+.faixa-erro summary { cursor: pointer; }
+.sistema.erro.resolvido p { border-color: var(--borda); color: var(--texto-2); text-decoration: line-through; text-decoration-color: #6f6d86; }
+.sistema.erro.resolvido em { text-decoration: none; font-style: normal; color: var(--ok); }
+
+/* Cards de projeto */
+.projetos li { gap: 8px; padding: 12px; }
+.projetos li.urgente { border-color: var(--alerta); }
+.cabeca-projeto { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; align-items: baseline; }
+.progresso { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.progresso li { padding: 0; border: 0; background: none; display: grid; gap: 3px; }
+.progresso li::before { content: ''; height: 6px; border-radius: 3px; background: #2c3045; }
+.progresso li[data-estado="feito"]::before { background: var(--ok); }
+.progresso li[data-estado="atual"]::before { background: var(--destaque); }
+.progresso li[data-estado="erro"]::before { background: var(--perigo); }
+.progresso span { font-size: 10px; color: #6f6d86; text-align: center; }
+.progresso li[data-estado="atual"] span, .progresso li[data-estado="erro"] span { color: var(--texto); font-weight: 600; }
+.projetos .situacao { font-size: 12px; color: var(--texto-2); }
+.projetos li.urgente .situacao { color: var(--alerta); }
+.acoes-projeto .botao { font-size: 13px; }

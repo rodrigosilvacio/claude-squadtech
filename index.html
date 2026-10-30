@@ -39,6 +39,8 @@
     </div>
   </header>
 
+  <section class="pendencias" id="pendencias" aria-label="O que precisa de você" aria-live="polite" hidden></section>
+
   <main class="layout">
     <section class="palco" aria-label="Escritório">
       <div class="projeto-barra" id="projetoBarra" hidden>
@@ -46,8 +48,9 @@
         <strong id="projetoNome"></strong>
         <span class="status" id="projetoStatus"></span>
         <span class="tokens" id="projetoTokens"></span>
-        <span class="links-projeto" id="projetoLinks"></span>
       </div>
+      <div class="acoes-barra" id="projetoAcoes" hidden></div>
+      <div id="projetoEntrar" hidden></div>
       <div class="faixa-erro" id="projetoErro" role="alert" hidden></div>
       <div class="faixa-testes" id="projetoTestes" role="status" hidden>
         <span>Sala 4 · O Igor preparou os testes. Eles rodam aqui no seu navegador.</span>

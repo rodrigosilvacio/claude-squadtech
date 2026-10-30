@@ -25,6 +25,39 @@ const ROTULO_ARTEFATO = {
   revisao_codigo: 'Revisão de código', testes: 'Testes', relatorio_testes: 'Relatório de testes', entrega: 'Entrega',
 };
 
+// Erros da esteira em linguagem de gente; o texto técnico fica no detalhe.
+export function erroAmigavel(bruto) {
+  const t = String(bruto ?? '');
+  if (/cortada|limite de tokens/i.test(t)) return 'Um agente escreveu mais do que cabia numa resposta.';
+  if (/teto de .*tokens/i.test(t)) return 'O projeto chegou ao limite de custo definido para ele.';
+  if (/token do GitHub|GITHUB_TOKEN|Contents: write/i.test(t)) return 'Falta liberar a publicação no GitHub.';
+  if (/parou 3 vezes/i.test(t)) return 'Um passo travou três vezes seguidas.';
+  if (/recusou/i.test(t)) return 'O modelo recusou o pedido. Vale revisar o briefing.';
+  if (/migração/i.test(t)) return 'O banco de dados não aceitou a migração.';
+  if (/não devolveu o arquivo|formato combinado/i.test(t)) return 'Um dev entregou o arquivo num formato inesperado.';
+  return 'Um passo da esteira falhou.';
+}
+
+// Próxima ação do projeto, do ponto de vista de quem usa.
+export function proximaAcao(p) {
+  if (p.erro) return { rotulo: 'Ver o que travou', urgente: true };
+  if (p.etapa === 'aguardando_respostas') return { rotulo: 'Responder perguntas da Ana', urgente: true };
+  if (p.etapa === 'aguardando_aprovacao_prd') return { rotulo: 'Aprovar o PRD', urgente: true };
+  if (p.etapa === 'aguardando_aprovacao_arquitetura') return { rotulo: 'Aprovar a arquitetura', urgente: true };
+  if (p.etapa === 'testes' && p.subpasso === 'navegador') return { rotulo: 'Rodar os testes', urgente: true };
+  if (p.etapa === 'concluido') return { rotulo: 'Abrir no escritório', urgente: false };
+  if (p.etapa === 'apagando') return { rotulo: 'Apagando...', urgente: false };
+  return { rotulo: 'Acompanhar o squad', urgente: false };
+}
+
+// Em que sala o projeto está (0 a 4) e se já foi entregue (5).
+const SALA_DA_ETAPA = {
+  entrevista: 0, aguardando_respostas: 0, prd: 0, aguardando_aprovacao_prd: 0,
+  arquitetura: 1, aguardando_aprovacao_arquitetura: 1, migracao: 1,
+  planejamento: 2, desenvolvimento: 2, integracao: 2, testes: 3, delivery: 4, concluido: 5,
+};
+const NOMES_SALAS = ['Produto', 'Arquitetura', 'Dev', 'Testes', 'Delivery'];
+
 export function markdownSeguro(md) {
   return DOMPurify.sanitize(marked.parse(String(md ?? '')));
 }
@@ -182,7 +215,17 @@ export class UI {
   }
 
   registrarSistema(texto, { quando, erro } = {}) {
-    this.adicionarLinha(el('li', { class: erro ? 'sistema erro' : 'sistema', 'data-sala': 'sistema' }, el('p', { text: texto }), el('time', { text: hora(quando) })));
+    const visivel = erro && /^A esteira parou/.test(texto) ? `${erroAmigavel(texto)} Use "Retomar" para tentar de novo.` : texto;
+    this.adicionarLinha(el('li', { class: erro ? 'sistema erro' : 'sistema', 'data-sala': 'sistema' },
+      el('p', { text: visivel, title: visivel !== texto ? texto : null }), el('time', { text: hora(quando) })));
+  }
+
+  // Erros que já ficaram para trás aparecem como resolvidos no histórico.
+  marcarErrosResolvidos() {
+    for (const li of document.querySelectorAll('#conversa .sistema.erro:not(.resolvido)')) {
+      li.classList.add('resolvido');
+      li.querySelector('p').append(el('em', { text: ' · resolvido' }));
+    }
   }
 
   // ---------- artefatos ----------
@@ -309,12 +352,21 @@ export class UI {
     }
     dlg.querySelector('.conteudo').replaceChildren(
       el('p', { text: d.resumo ?? 'Solução entregue.' }),
+      !d.escalado ? this.cartaoEntrar() : null,
       el('ul', { class: 'links' }, (d.links ?? []).map((l) => el('li', {},
         l.url ? el('a', { href: l.url, target: '_blank', rel: 'noopener' }, l.rotulo) : el('span', { class: 'desabilitado', text: l.rotulo }),
         l.nota ? el('small', { text: l.nota }) : null))),
       d.zip ? el('button', { type: 'button', class: 'botao', onclick: () => this.aoBaixarZip?.() }, 'Baixar zip da pasta') : null,
       d.arquivos ? el('pre', { class: 'arvore', text: d.arquivos }) : null);
     dlg.showModal();
+  }
+
+  // Como entrar no app gerado: mesma conta do SquadTech (o app usa o mesmo Supabase Auth).
+  cartaoEntrar() {
+    return el('div', { class: 'como-entrar' },
+      el('strong', { text: 'Como entrar no app' }),
+      el('p', { text: `Se o app pedir login, use a mesma conta do SquadTech${this.emailConta ? `: ${this.emailConta}` : ''}, com a mesma senha.` }),
+      el('p', { class: 'meta', text: 'Esqueceu a senha? Use "Esqueci minha senha" na tela de login do próprio app.' }));
   }
 
   // ---------- tooltip ----------
@@ -343,20 +395,26 @@ export class UI {
     faixa.hidden = !p.erro;
     if (p.erro) {
       faixa.replaceChildren(
-        el('span', { text: `A esteira parou: ${p.erro}` }),
-        el('button', { type: 'button', class: 'botao', onclick: aoRetomar }, 'Retomar'));
+        el('span', {},
+          el('strong', { text: erroAmigavel(p.erro) }),
+          el('details', {}, el('summary', { text: 'Detalhe técnico' }), el('small', { text: p.erro }))),
+        el('button', { type: 'button', class: 'botao primario', onclick: aoRetomar }, 'Retomar'));
+    } else {
+      this.marcarErrosResolvidos();
     }
     $('#projetoTokens').textContent = p.tokens_entrada != null
       ? `${Math.round((p.tokens_entrada + p.tokens_saida) / 1000)} mil tokens${p.tokens_cache ? ` + ${Math.round(p.tokens_cache / 1000)} mil do cache` : ''}` : '';
-    const versao = p.ciclo > 1 ? ` · versão ${p.ciclo}` : '';
-    $('#projetoLinks').replaceChildren(...[
-      ...(p.url_app ? [
-        el('a', { href: p.url_app, target: '_blank', rel: 'noopener' }, `Abrir app${versao}`),
-        el('button', { type: 'button', class: 'link', onclick: () => this.aoBaixarZip?.() }, 'Baixar zip'),
-      ] : []),
-      p.etapa === 'concluido' ? el('button', { type: 'button', class: 'link', onclick: () => this.aoPedirAjuste?.() }, 'Pedir ajuste') : null,
-      p.etapa !== 'apagando' ? el('button', { type: 'button', class: 'link perigo', onclick: () => this.aoApagar?.(p) }, 'Apagar projeto') : null,
+    const versao = p.ciclo > 1 ? ` (versão ${p.ciclo})` : '';
+    $('#projetoAcoes').hidden = !p.url_app && p.etapa === 'apagando';
+    $('#projetoAcoes').replaceChildren(...[
+      p.url_app ? el('a', { class: 'botao primario', href: p.url_app, target: '_blank', rel: 'noopener' }, `Abrir app${versao}`) : null,
+      p.etapa === 'concluido' ? el('button', { type: 'button', class: 'botao', onclick: () => this.aoPedirAjuste?.() }, 'Pedir ajuste') : null,
+      p.url_app ? el('button', { type: 'button', class: 'botao', onclick: () => this.aoBaixarZip?.() }, 'Baixar zip') : null,
+      p.etapa !== 'apagando' ? el('button', { type: 'button', class: 'botao apagar', onclick: () => this.aoApagar?.(p) }, 'Apagar projeto') : null,
     ].filter(Boolean));
+    const entrar = $('#projetoEntrar');
+    entrar.hidden = !p.url_app;
+    if (p.url_app) entrar.replaceChildren(this.cartaoEntrar());
   }
 
   iniciarProjeto(nome, modo) {
@@ -381,10 +439,24 @@ export class UI {
     $('#projetoErro').hidden = true;
     $('#projetoTestes').hidden = true;
     $('#projetoTokens').textContent = '';
-    $('#projetoLinks').replaceChildren();
+    $('#projetoAcoes').replaceChildren();
+    $('#projetoAcoes').hidden = true;
+    $('#projetoEntrar').hidden = true;
   }
 
   // ---------- projetos (nuvem) ----------
+
+  // Painel "O que precisa de você": projetos parados esperando uma ação sua.
+  renderizarPendencias(projetos = [], aoAbrir) {
+    const caixa = $('#pendencias');
+    const urgentes = projetos.filter((p) => proximaAcao(p).urgente);
+    caixa.hidden = !urgentes.length;
+    caixa.replaceChildren(
+      el('strong', { class: 'titulo-pendencias', text: urgentes.length === 1 ? '1 projeto precisa de você' : `${urgentes.length} projetos precisam de você` }),
+      el('ul', {}, urgentes.map((p) => el('li', {},
+        el('span', { text: p.nome }),
+        el('button', { type: 'button', class: 'botao primario', onclick: () => aoAbrir(p.id) }, proximaAcao(p).rotulo)))));
+  }
 
   renderizarProjetos({ logado, membro, projetos, erro, aoEntrar, aoAbrir }) {
     const caixa = $('#listaProjetos');
@@ -400,15 +472,22 @@ export class UI {
       caixa.replaceChildren(el('p', { class: 'vazio', text: 'Nenhum projeto ainda. Descreva um briefing e clique em "Iniciar projeto".' }));
       return;
     }
-    const situacao = (p) => (p.erro ? 'parado com erro'
+    const situacao = (p) => (p.erro ? `Parado: ${erroAmigavel(p.erro).toLowerCase().replace(/\.$/, '')}`
       : p.etapa === 'testes' && p.subpasso === 'navegador' ? 'Sala 4 · esperando você rodar os testes'
         : (STATUS_ETAPA[p.etapa] ?? p.etapa.replaceAll('_', ' ')));
-    caixa.replaceChildren(el('ul', { class: 'projetos' }, projetos.map((p) => el('li', {},
-      el('button', { type: 'button', class: 'projeto', onclick: () => aoAbrir(p.id) },
-        el('strong', { text: p.nome }),
-        el('span', { text: `${situacao(p)} · ${new Date(p.criado_em).toLocaleDateString('pt-BR')}` })),
-      el('div', { class: 'acoes-projeto' },
-        el('button', { type: 'button', class: 'botao primario', onclick: () => aoAbrir(p.id) }, 'Abrir no escritório'),
-        p.url_app ? el('a', { href: p.url_app, target: '_blank', rel: 'noopener', class: 'link' }, 'Ver app publicado') : null)))));
+    caixa.replaceChildren(el('ul', { class: 'projetos' }, projetos.map((p) => {
+      const acao = proximaAcao(p);
+      const sala = SALA_DA_ETAPA[p.etapa] ?? 0;
+      return el('li', { class: acao.urgente ? 'urgente' : null },
+        el('div', { class: 'cabeca-projeto' },
+          el('strong', { text: p.nome }),
+          el('span', { text: `${new Date(p.criado_em).toLocaleDateString('pt-BR')}${p.ciclo > 1 ? ` · versão ${p.ciclo}` : ''}` })),
+        el('ol', { class: 'progresso', 'aria-label': `Progresso: ${sala >= 5 ? 'entregue' : `sala ${sala + 1} de 5`}` },
+          NOMES_SALAS.map((nome, i) => el('li', { 'data-estado': i < sala ? 'feito' : i === sala ? (p.erro ? 'erro' : 'atual') : '', title: nome }, el('span', { text: nome })))),
+        el('span', { class: 'situacao', text: situacao(p) }),
+        el('div', { class: 'acoes-projeto' },
+          el('button', { type: 'button', class: acao.urgente ? 'botao primario' : 'botao', onclick: () => aoAbrir(p.id) }, acao.rotulo),
+          p.url_app ? el('a', { href: p.url_app, target: '_blank', rel: 'noopener', class: 'botao' }, 'Abrir app') : null));
+    })));
   }
 }

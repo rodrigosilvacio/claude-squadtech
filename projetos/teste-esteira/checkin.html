@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#0842a0">
+  <title>Check-in do workshop</title>
+  <link rel="stylesheet" href="./css/estilo.css">
+</head>
+<body>
+  <header id="topo">
+    <h1>Check-in do workshop</h1>
+  </header>
+
+  <main id="checkin">
+    <section class="tela" aria-labelledby="checkin-titulo">
+      <div class="cartao">
+        <h2 id="checkin-titulo">Confirme sua presença</h2>
+        <p>Digite o e-mail que você usou na inscrição.</p>
+        <form id="checkin-form" novalidate>
+          <div class="campo">
+            <label for="checkin-email">Seu e-mail</label>
+            <input id="checkin-email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="254" required>
+          </div>
+          <button id="checkin-enviar" class="btn btn-primario btn-grande" type="submit">Confirmar presença</button>
+        </form>
+      </div>
+      <p id="checkin-msg" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <noscript><p class="erro">Ative o JavaScript para confirmar sua presença.</p></noscript>
+  <script type="module" src="./js/checkin-publico.js"></script>
+</body>
+</html>

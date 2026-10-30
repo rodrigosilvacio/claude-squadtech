@@ -2,7 +2,7 @@
 // presente em squad_usuarios; deploy com verify_jwt ligado).
 //  - { acao: "criar", nome, briefing }             cria o projeto e liga a esteira
 //  - { acao: "responder", id, respostas: [...] }   respostas às perguntas da Ana
-//  - { acao: "decidir", id, portao: "prd", aprovado, comentario? }
+//  - { acao: "decidir", id, portao: "prd" | "arquitetura", aprovado, comentario? }
 //  - { acao: "retomar", id }                       reabre um passo que parou
 // Toda escrita usa a service role; o navegador só lê (RLS).
 import { createClient } from 'npm:@supabase/supabase-js@2.110.5';
@@ -15,7 +15,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const ETAPAS_AUTOMATICAS = ['entrevista', 'prd'];
+const ETAPAS_AUTOMATICAS = ['entrevista', 'prd', 'arquitetura', 'migracao'];
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -112,35 +112,51 @@ async function responder(userId: string, corpo: Record<string, unknown>) {
   return json({ ok: true });
 }
 
+// Portões 1 (PRD) e 2 (arquitetura): aprovar avança; pedir ajustes volta para a dupla da sala.
+const PORTOES: Record<string, { etapa: string; tipo: string; nome: string; voltaPara: [string, string] }> = {
+  prd: { etapa: 'aguardando_aprovacao_prd', tipo: 'prd', nome: 'o PRD', voltaPara: ['prd', 'bruno_escreve'] },
+  arquitetura: { etapa: 'aguardando_aprovacao_arquitetura', tipo: 'arquitetura', nome: 'a arquitetura', voltaPara: ['arquitetura', 'carla_propoe'] },
+};
+
 async function decidir(userId: string, corpo: Record<string, unknown>) {
   const p = await projetoDoUsuario(userId, corpo.id);
-  if (corpo.portao !== 'prd') throw new Recusa('Portão desconhecido.');
-  if (p.etapa !== 'aguardando_aprovacao_prd') throw new Recusa('Este projeto não está esperando aprovação do PRD.', 409);
+  const portao = PORTOES[String(corpo.portao)];
+  if (!portao) throw new Recusa('Portão desconhecido.');
+  if (p.etapa !== portao.etapa) throw new Recusa(`Este projeto não está esperando aprovação d${portao.nome}.`, 409);
   const aprovado = corpo.aprovado === true;
   const comentario = String(corpo.comentario ?? '').trim().slice(0, 2000);
-  if (!aprovado && comentario.length < 5) throw new Recusa('Descreva o ajuste que você quer no PRD.');
+  if (!aprovado && comentario.length < 5) throw new Recusa(`Descreva o ajuste que você quer n${portao.nome}.`);
 
-  const { data: prd, error } = await servico.from('squad_artefatos').select('id, versao')
-    .eq('projeto_id', p.id).eq('tipo', 'prd').order('versao', { ascending: false }).limit(1).single();
+  const { data: doc, error } = await servico.from('squad_artefatos').select('id, versao')
+    .eq('projeto_id', p.id).eq('tipo', portao.tipo).order('versao', { ascending: false }).limit(1).single();
   if (error) throw error;
-  await servico.from('squad_artefatos').update({ aprovado, comentario: comentario || null }).eq('id', prd.id);
+  // O plano (arquivos, SQL, tarefas) é aprovado junto com o documento da arquitetura.
+  await servico.from('squad_artefatos').update({ aprovado, comentario: comentario || null })
+    .eq('projeto_id', p.id).in('tipo', portao.tipo === 'arquitetura' ? ['arquitetura', 'plano', 'sql'] : ['prd']).eq('versao', doc.versao);
+  const sala = portao.tipo === 'prd' ? 'produto' : 'arquitetura';
 
   if (!aprovado) {
-    await evento(p.id, 'sistema', { texto: `Você pediu ajustes no PRD v${prd.versao}: "${comentario}"` });
-    const { error: e2 } = await servico.from('squad_projetos').update({
-      etapa: 'prd', subpasso: 'bruno_escreve', passo_em: null, tentativas: 0,
-      rascunho: { premissas: p.rascunho?.premissas ?? [], comentario },
-    }).eq('id', p.id);
+    await evento(p.id, 'sistema', { sala, texto: `Você pediu ajustes n${portao.nome} v${doc.versao}: "${comentario}"` });
+    const [etapa, subpasso] = portao.voltaPara;
+    const rascunho = portao.tipo === 'prd' ? { premissas: p.rascunho?.premissas ?? [], comentario } : { comentario };
+    const { error: e2 } = await servico.from('squad_projetos').update({ etapa, subpasso, passo_em: null, tentativas: 0, rascunho }).eq('id', p.id);
     if (e2) throw e2;
     return json({ ok: true });
   }
 
-  await evento(p.id, 'sistema', { texto: `Você aprovou o PRD v${prd.versao}` });
-  await evento(p.id, 'fala', { agente: 'bruno', para: 'ana', texto: 'PRD aprovado! Vou levar para a Arquitetura.' });
-  await evento(p.id, 'handoff', { agente: 'bruno', para: 'carla', texto: `Carla, aqui está o PRD v${prd.versao} aprovado pelo cliente.`, dados: { artefato: 'o PRD' } });
-  await evento(p.id, 'fase', { sala: 'arquitetura', texto: 'Sala 2 · Arquitetura recebe o PRD' });
-  await evento(p.id, 'sistema', { sala: 'arquitetura', texto: 'A Sala de Arquitetura entra em operação na Fase 2. O projeto fica salvo aqui, com o PRD aprovado.' });
-  const { error: e2 } = await servico.from('squad_projetos').update({ etapa: 'arquitetura', subpasso: null, passo_em: null, tentativas: 0 }).eq('id', p.id);
+  if (portao.tipo === 'prd') {
+    await evento(p.id, 'sistema', { texto: `Você aprovou o PRD v${doc.versao}` });
+    await evento(p.id, 'fala', { agente: 'bruno', para: 'ana', texto: 'PRD aprovado! Vou levar para a Arquitetura.' });
+    await evento(p.id, 'handoff', { agente: 'bruno', para: 'carla', texto: `Carla, aqui está o PRD v${doc.versao} aprovado pelo cliente.`, dados: { artefato: 'o PRD' } });
+    await evento(p.id, 'fase', { sala: 'arquitetura', texto: 'Sala 2 · Arquitetura recebe o PRD' });
+    const { error: e2 } = await servico.from('squad_projetos').update({ etapa: 'arquitetura', subpasso: 'carla_propoe', passo_em: null, tentativas: 0, rascunho: {} }).eq('id', p.id);
+    if (e2) throw e2;
+    return json({ ok: true });
+  }
+
+  await evento(p.id, 'sistema', { sala, texto: `Você aprovou a arquitetura v${doc.versao}` });
+  await evento(p.id, 'fala', { sala, agente: 'carla', para: 'diego', texto: 'Arquitetura aprovada! Diego, pode aplicar a migração.' });
+  const { error: e2 } = await servico.from('squad_projetos').update({ etapa: 'migracao', subpasso: 'diego_aplica', passo_em: null, tentativas: 0, rascunho: {} }).eq('id', p.id);
   if (e2) throw e2;
   return json({ ok: true });
 }

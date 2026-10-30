@@ -11,7 +11,7 @@ const motor = new Motor($('#escritorio'));
 const ui = new UI(motor);
 const diretor = new Diretor(motor, ui);
 const dlgLogin = $('#dlgLogin');
-const ETAPAS_AGUARDANDO = ['aguardando_respostas', 'aguardando_aprovacao_prd'];
+const ETAPAS_AGUARDANDO = ['aguardando_respostas', 'aguardando_aprovacao_prd', 'aguardando_aprovacao_arquitetura'];
 let emDemo = false;
 
 // ---------- projeto real ----------

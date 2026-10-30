@@ -239,7 +239,8 @@ textarea:disabled { opacity: 0.4; }
 .ajuste { display: grid; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--borda); }
 .ajuste label { font-weight: 600; font-size: 12px; color: var(--alerta); }
 
-.markdown { line-height: 1.6; }
+.markdown { line-height: 1.6; overflow-x: auto; }
+.markdown td code { white-space: nowrap; }
 .markdown h1 { font: 700 20px/1.25 var(--pixel); margin: 0 0 10px; }
 .markdown h2 { font-size: 15px; margin: 18px 0 6px; color: var(--destaque); }
 .markdown table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }

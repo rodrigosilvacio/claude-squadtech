@@ -52,7 +52,10 @@ const STATUS_ETAPA = {
   aguardando_respostas: 'Aguardando suas respostas',
   prd: 'Sala 1 · Bruno escrevendo o PRD',
   aguardando_aprovacao_prd: 'Aguardando sua aprovação do PRD',
-  arquitetura: 'PRD aprovado · a Sala de Arquitetura chega na Fase 2',
+  arquitetura: 'Sala 2 · Carla e Diego desenhando a solução',
+  aguardando_aprovacao_arquitetura: 'Aguardando sua aprovação da arquitetura',
+  migracao: 'Sala 2 · Diego aplicando a migração no banco',
+  planejamento: 'Arquitetura aprovada · a Sala de Desenvolvimento chega na Fase 3',
   escalado: 'Encerrado pela Ana',
 };
 

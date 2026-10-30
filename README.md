@@ -22,8 +22,8 @@ Escritório em pixel art onde 11 agentes de IA levam um briefing até uma **apli
 |---|---|---|
 | 0 · Fundação | Escritório visual, tabelas `squad_*`, login, demonstração encenada | ✅ |
 | 1 · Produto | Sala 1 real (Ana e Bruno na Claude API) + Portão 1 | ✅ |
-| 2 · Arquitetura | Sala 2 real + Portão 2 | Próxima |
-| 3 · Dev + Delivery | Commit em `projetos/` | |
+| 2 · Arquitetura | Sala 2 real (Carla e Diego) + Portão 2 + executor seguro de SQL | ✅ |
+| 3 · Dev + Delivery | Commit em `projetos/` | Próxima |
 | 4 · Testes + Dados | QA no navegador + migrações | |
 
 ## Estrutura
@@ -46,6 +46,11 @@ supabase/migrations/  SQL aplicado no projeto ClaudeProjects
 supabase/functions/
   squad-pedir/        ações do usuário (criar, responder, decidir, retomar), com login
   squad-esteira/      executa um passo da esteira por invocação (chamada pelo banco)
+    nucleo.ts           banco, eventos e chamada ao Claude
+    sala-produto.ts     Ana e Bruno
+    sala-arquitetura.ts Carla e Diego, validação do plano e migração
+    sql.ts              validador do SQL gerado (1ª barreira)
+    prompts.ts          personas, regras técnicas e formatos JSON
 projetos/             apps entregues pelo squad (um por pasta)
 ```
 
@@ -65,6 +70,17 @@ python3 -m http.server 8000
 5. O cron `squad-reenviar-paradas` (a cada 2 min) reenvia passos parados; depois de 3 tentativas, o projeto mostra "Retomar".
 
 Sala 1 (Produto): `ana_analisa → bruno_critica → ana_pergunta → [suas respostas] → bruno_escreve → ana_revisa → bruno_ajusta → [Portão 1]`.
+
+Sala 2 (Arquitetura): `carla_propoe → diego_revisa → carla_ajusta → [Portão 2] → diego_aplica (migração)`.
+
+## SQL gerado pelos agentes
+
+O projeto Supabase é compartilhado com outros apps, então o SQL da Carla passa por duas barreiras:
+
+1. **`sql.ts` (esteira):** só `create table`, `alter table`, `create [unique] index`, `create policy`, `insert into` e `comment on`, sempre em `public.<prefixo>*`; RLS obrigatório em toda tabela criada; sem funções, triggers, `DROP`, `GRANT`, blocos `$` ou leitura de `auth.users`.
+2. **`squad_executar_migracao` (banco):** repete as checagens comando a comando, aplica tudo numa transação só e confere RLS ligado no fim. Só a service role executa.
+
+O prefixo é único por projeto (`sq_<slug curto>_<4 hex do id>_`) e o SQL só roda depois do Portão 2.
 
 ## Eventos
 
